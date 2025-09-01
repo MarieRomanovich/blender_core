@@ -1,48 +1,39 @@
-import asyncio
-import json
-import logging
-import os
-import ssl
-import sys
-import subprocess
+import asyncio, json, logging, os, ssl, sys, subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-# Minimal self-bootstrap (no requirements.txt/venv)
+# Auto-install minimal deps
 def ensure_deps():
-    pkgs = [
+    for mod, spec in [
         ("pyrogram", "pyrogram>=2.0.106"),
         ("aiohttp", "aiohttp>=3.9.0"),
         ("dotenv", "python-dotenv>=1.0.0"),
         ("tgcrypto", "tgcrypto>=1.2.5"),
         ("certifi", "certifi>=2024.2.2"),
-    ]
-    for mod, spec in pkgs:
+    ]:
         try:
             __import__(mod)
         except Exception:
             subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", spec])
-
 ensure_deps()
 
-from aiohttp import ClientSession, FormData, TCPConnector  # noqa: E402
-from dotenv import load_dotenv  # noqa: E402
-from pyrogram import Client  # noqa: E402
-from pyrogram.handlers import MessageHandler  # noqa: E402
-from pyrogram.types import Message  # noqa: E402
-import certifi  # noqa: E402
+from aiohttp import ClientSession, FormData, TCPConnector
+from dotenv import load_dotenv
+from pyrogram import Client
+from pyrogram.handlers import MessageHandler
+from pyrogram.types import Message
+import certifi
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("userbot")
 
-# Project paths
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_DIR / "data"
 TMP_DIR = DATA_DIR / "tmp"
 DATA_DIR.mkdir(exist_ok=True)
 TMP_DIR.mkdir(exist_ok=True)
 
-STATE_PATH = DATA_DIR / "state.json"  # {"target_chat_id": int, "subscribed": bool}
+STATE_PATH = DATA_DIR / "state.json"  # {"target_chat_id": int, "subscribed": bool, "paid": bool}
 
 def load_json(path: Path, default):
     try:
@@ -76,10 +67,10 @@ class Forwarder:
         self._state_mtime: float = 0.0
         self._target_chat_id: Optional[int] = None
         self._subscribed: bool = False
-        # SSL context using certifi (fixes broken system CA)
-        self._ssl_ctx = ssl.create_default_context(cafile=certifi.where())
-        # Optional override: set TELEGRAM_SSL_INSECURE=1 in .env to skip verification (not recommended)
-        self._insecure = os.getenv("TELEGRAM_SSL_INSECURE") == "1"
+        self._paid: bool = False
+        insecure = os.getenv("TELEGRAM_SSL_INSECURE") == "1"
+        self._ssl_ctx = None if insecure else ssl.create_default_context(cafile=certifi.where())
+        self._insecure = insecure
 
     async def init_http(self):
         connector = TCPConnector(ssl=False) if self._insecure else TCPConnector(ssl=self._ssl_ctx)
@@ -95,8 +86,9 @@ class Forwarder:
             st = load_json(STATE_PATH, {})
             self._target_chat_id = st.get("target_chat_id")
             self._subscribed = bool(st.get("subscribed", False))
+            self._paid = bool(st.get("paid", False))
             self._state_mtime = mt
-            logger.info(f"Reloaded state: target={self._target_chat_id} subscribed={self._subscribed}")
+            logger.info(f"Reloaded state: target={self._target_chat_id} subscribed={self._subscribed} paid={self._paid}")
 
     async def _post_json(self, method: str, payload: Dict[str, Any]):
         assert self._session and self._target_chat_id
@@ -118,8 +110,7 @@ class Forwarder:
         data.add_field("chat_id", str(self._target_chat_id))
         if caption:
             data.add_field("caption", caption)
-        f = file_path.open("rb")
-        try:
+        with file_path.open("rb") as f:
             data.add_field(file_field, f, filename=file_path.name)
             async with self._session.post(url, data=data, timeout=300) as resp:
                 if resp.status == 429:
@@ -130,17 +121,11 @@ class Forwarder:
                 if resp.status != 200:
                     text = await resp.text()
                     logger.warning(f"{method} failed {resp.status}: {text}")
-        finally:
-            try:
-                f.close()
-            except Exception:
-                pass
 
     async def _send_text(self, text: str):
         await self._post_json("sendMessage", {"chat_id": self._target_chat_id, "text": text})
 
     async def _send_media(self, m: Message, kind: str, caption: Optional[str]):
-        # Download to disk, stream upload to Bot API
         path_str = await m.download(file_name=str(TMP_DIR / "media"))
         if not path_str:
             await self._send_text(caption or f"[{kind}]")
@@ -158,7 +143,7 @@ class Forwarder:
             elif kind == "voice":
                 await self._post_file("sendVoice", "voice", p, caption)
             elif getattr(m, "animation", None):
-                await self._post_file("sendAnimation", "animation", p, caption)
+                await self._send_text(caption or "[animation]")
             else:
                 await self._post_file("sendDocument", "document", p, caption or f"[{kind}]")
         finally:
@@ -168,18 +153,14 @@ class Forwarder:
                 pass
 
     async def on_message(self, _app: Client, m: Message):
-        # Keep state current
         self._reload_state_if_changed()
-        if not self._target_chat_id or not self._subscribed:
+        if not self._target_chat_id or not (self._subscribed and self._paid):
             return
-
-        # Ignore your own outgoing messages and bot messages to avoid loops
         if m.outgoing:
             return
         if m.from_user and m.from_user.is_bot:
             return
 
-        # Text or media
         title = display_title(m.chat)
         if m.text:
             await self._send_text(f"[{title}] {m.text}")
@@ -197,13 +178,10 @@ class Forwarder:
             await self._send_media(m, "audio", cap)
         elif m.voice:
             await self._send_media(m, "voice", cap)
-        elif getattr(m, "animation", None):
-            await self._send_media(m, "animation", cap)
         else:
             await self._send_text(cap)
 
 async def main():
-    # Load .env from the project root
     load_dotenv(PROJECT_DIR / ".env")
     api_id = os.getenv("API_ID")
     api_hash = os.getenv("API_HASH")
@@ -213,7 +191,7 @@ async def main():
         raise RuntimeError("Missing API_ID, API_HASH or TELEGRAM_BOT_TOKEN in .env")
 
     app = Client("user", api_id=int(api_id), api_hash=api_hash)
-    await app.start()  # First run prompts for login
+    await app.start()
     logger.info("Userbot (Pyrogram) signed in.")
 
     fwd = Forwarder(app, bot_token)
@@ -223,7 +201,7 @@ async def main():
     app.add_handler(MessageHandler(fwd.on_message))
 
     try:
-        logger.info("Userbot running. Use the bot button to Subscribe/Unsubscribe.")
+        logger.info("Userbot running.")
         await asyncio.Event().wait()
     finally:
         await fwd.close_http()
