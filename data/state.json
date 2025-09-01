@@ -1,5 +1,6 @@
 {
   "paid": true,
-  "subscribed": false,
+  "paid_forced": true,
+  "subscribed": true,
   "target_chat_id": 1283416844
 }

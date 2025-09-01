@@ -46,6 +46,30 @@ fn is_subscribed(st: &Value) -> bool {
 fn is_paid(st: &Value) -> bool {
     st.get("paid").and_then(|b| b.as_bool()).unwrap_or(false)
 }
+fn is_paid_forced(st: &Value) -> bool {
+    st.get("paid_forced").and_then(|b| b.as_bool()).unwrap_or(false)
+}
+
+// Normalize "paid" based on payments mode and presence of a confirmed invoice
+fn normalize_paid_state(st: &mut Value, pay: &payments::Payments) {
+    // If payments are disabled -> force paid
+    if !pay.enabled() {
+        st["paid"] = Value::from(true);
+        st["paid_forced"] = Value::from(true);
+        return;
+    }
+    // Payments enabled:
+    // if paid was forced earlier, clear it
+    if is_paid_forced(st) {
+        st["paid"] = Value::from(false);
+        st["paid_forced"] = Value::from(false);
+    }
+    // If "paid" is true but no invoice_id recorded, clear it to show Pay button
+    let has_invoice = st.get("paid_invoice_id").and_then(|v| v.as_i64()).is_some();
+    if is_paid(st) && !has_invoice {
+        st["paid"] = Value::from(false);
+    }
+}
 
 fn kb_enable() -> InlineKeyboardMarkup {
     InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback(
@@ -61,13 +85,14 @@ fn kb_disable() -> InlineKeyboardMarkup {
 }
 
 async fn greet(bot: &Bot, chat_id: ChatId, st: &Value, pay: &payments::Payments) {
-    // First greeting
+    let paid = is_paid(st);
+    // 1) Greeting
     let _ = bot
         .send_message(chat_id, "Welcome! You can use this bot after paying.")
         .await;
 
-    // Second message with either Pay or Enable/Disable
-    if !is_paid(st) && pay.enabled() {
+    // 2) Either Pay or Enable/Disable
+    if pay.enabled() && !paid {
         let _ = bot
             .send_message(chat_id, "Tap Pay below to continue.")
             .reply_markup(pay.start_button())
@@ -75,7 +100,7 @@ async fn greet(bot: &Bot, chat_id: ChatId, st: &Value, pay: &payments::Payments)
     } else {
         let kb = if is_subscribed(st) { kb_disable() } else { kb_enable() };
         let _ = bot
-            .send_message(chat_id, "You can control notifications below.")
+            .send_message(chat_id, "Control notifications below.")
             .reply_markup(kb)
             .await;
     }
@@ -91,10 +116,10 @@ async fn handle_message(bot: Bot, msg: Message, pay: &payments::Payments) -> any
     if st.get("paid").is_none() {
         st["paid"] = Value::from(false);
     }
-    // If payments are disabled, treat as paid
-    if !pay.enabled() {
-        st["paid"] = Value::from(true);
-    }
+
+    // Normalize paid flag depending on payments mode/invoice presence
+    normalize_paid_state(&mut st, pay);
+
     write_json_atomic(STATE_PATH, &st).ok();
     greet(&bot, msg.chat.id, &st, pay).await;
     Ok(())
@@ -124,13 +149,10 @@ async fn handle_toggle(bot: &Bot, q: &CallbackQuery, pay: &payments::Payments) {
         st["target_chat_id"] = Value::from(msg.chat.id.0);
     }
 
-    // If payments are disabled, ensure paid=true so forwarding can work
-    if !pay.enabled() && !is_paid(&st) {
-        st["paid"] = Value::from(true);
-    }
+    // Keep paid flag consistent with current payments mode
+    normalize_paid_state(&mut st, pay);
 
-    // Block toggling only when payments are enabled and user is not paid
-    if is_paid(&st) == false && pay.enabled() {
+    if pay.enabled() && !is_paid(&st) {
         if let Some(msg) = &q.message {
             start_payment_flow(bot, msg.chat.id, pay).await;
         }
@@ -138,6 +160,7 @@ async fn handle_toggle(bot: &Bot, q: &CallbackQuery, pay: &payments::Payments) {
             .answer_callback_query(q.id.clone())
             .text("Payment required.")
             .await;
+        let _ = write_json_atomic(STATE_PATH, &st);
         return;
     }
 
@@ -179,12 +202,14 @@ async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Paym
         }
         match pay.get_invoice(id).await {
             Ok(Some(inv)) if inv.status == "paid" => {
-                // Mark paid, but don't auto-enable notifications
+                // Mark paid and record invoice id
                 let mut st = read_state();
                 if let Some(msg) = &q.message {
                     st["target_chat_id"] = Value::from(msg.chat.id.0);
                 }
                 st["paid"] = Value::from(true);
+                st["paid_forced"] = Value::from(false);
+                st["paid_invoice_id"] = Value::from(id);
                 if st.get("subscribed").is_none() {
                     st["subscribed"] = Value::from(false);
                 }

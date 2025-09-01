@@ -52,14 +52,13 @@ impl Payments {
 
         let disabled_marker = PathBuf::from("data").join("payments.disabled");
         // filepath: c:\Users\User\final_try\src\payments.rs
-        let enabled_env = env::var("PAYMENTS_ENABLED")
+        let enabled_env = std::env::var("PAYMENTS_ENABLED")
             .ok()
-            .and_then(|v| {
-                // Allow inline comments and words (e.g., "0  # comment")
-                let first = v.split('#').next().unwrap_or("").trim().to_ascii_lowercase();
-                match first.as_str() {
-                    "0" | "false" | "off" => Some(false),
+            .and_then(|raw| {
+                let v = raw.split('#').next().unwrap_or("").trim().to_ascii_lowercase();
+                match v.as_str() {
                     "1" | "true" | "on" => Some(true),
+                    "0" | "false" | "off" => Some(false),
                     _ => None,
                 }
             });
