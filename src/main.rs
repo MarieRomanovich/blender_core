@@ -8,6 +8,7 @@ use teloxide::{
     types::{InlineKeyboardButton, InlineKeyboardMarkup},
 };
 mod payments;
+mod admin;
 use tracing::{error, info};
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -84,18 +85,20 @@ fn kb_disable() -> InlineKeyboardMarkup {
     )]])
 }
 
-async fn greet(bot: &Bot, chat_id: ChatId, st: &Value, pay: &payments::Payments) {
-    let paid = is_paid(st);
-    // 1) Greeting
+async fn greet(bot: &Bot, chat_id: ChatId, st: &Value, pay: &payments::Payments, adm: &admin::Admin) {
     let _ = bot
         .send_message(chat_id, "Welcome! You can use this bot after paying.")
         .await;
 
-    // 2) Either Pay or Enable/Disable
-    if pay.enabled() && !paid {
+    if pay.enabled() && !is_paid(st) {
+        // Show Pay + I'm admin
+        let mut rows = vec![vec![pay.pay_button()]];
+        if adm.enabled() {
+            rows[0].push(admin::Admin::button());
+        }
         let _ = bot
-            .send_message(chat_id, "Tap Pay below to continue.")
-            .reply_markup(pay.start_button())
+            .send_message(chat_id, "Choose an option:")
+            .reply_markup(InlineKeyboardMarkup::new(rows))
             .await;
     } else {
         let kb = if is_subscribed(st) { kb_disable() } else { kb_enable() };
@@ -106,7 +109,17 @@ async fn greet(bot: &Bot, chat_id: ChatId, st: &Value, pay: &payments::Payments)
     }
 }
 
-async fn handle_message(bot: Bot, msg: Message, pay: &payments::Payments) -> anyhow::Result<()> {
+async fn handle_message(
+    bot: Bot,
+    msg: Message,
+    pay: &payments::Payments,
+    adm: &admin::Admin,
+) -> anyhow::Result<()> {
+    // If admin password is pending, consume this message first
+    if adm.on_text(&bot, &msg).await {
+        return Ok(());
+    }
+
     ensure_data_dir().ok();
     let mut st = read_state();
     st["target_chat_id"] = Value::from(msg.chat.id.0);
@@ -116,12 +129,11 @@ async fn handle_message(bot: Bot, msg: Message, pay: &payments::Payments) -> any
     if st.get("paid").is_none() {
         st["paid"] = Value::from(false);
     }
-
-    // Normalize paid flag depending on payments mode/invoice presence
+    // Normalize paid flag for current payments mode
     normalize_paid_state(&mut st, pay);
 
     write_json_atomic(STATE_PATH, &st).ok();
-    greet(&bot, msg.chat.id, &st, pay).await;
+    greet(&bot, msg.chat.id, &st, pay, adm).await;
     Ok(())
 }
 
@@ -274,14 +286,17 @@ async fn main() -> anyhow::Result<()> {
     let token = env::var("TELEGRAM_BOT_TOKEN").context("TELEGRAM_BOT_TOKEN not set in .env")?;
     let bot = Bot::new(token);
     let pay = payments::Payments::new_from_env()?;
+    let adm = admin::Admin::new_from_env();
 
     let pay_clone = pay.clone();
+    let adm_clone = adm.clone();
     let handler = dptree::entry()
         .branch(Update::filter_message().endpoint(
             move |bot: Bot, msg: Message| {
                 let pay = pay_clone.clone();
+                let adm = adm_clone.clone();
                 async move {
-                    if let Err(e) = handle_message(bot.clone(), msg, &pay).await {
+                    if let Err(e) = handle_message(bot.clone(), msg, &pay, &adm).await {
                         error!(error=?e, "handle_message failed");
                     }
                     Ok::<(), anyhow::Error>(())
@@ -291,10 +306,15 @@ async fn main() -> anyhow::Result<()> {
         .branch(Update::filter_callback_query().endpoint(
             move |bot: Bot, q: CallbackQuery| {
                 let pay = pay.clone();
+                let adm = adm.clone();
                 async move {
                     if let Some(data) = q.data.clone() {
                         if data.starts_with("pay:") {
                             handle_pay_callbacks(&bot, &q, &pay).await;
+                            return Ok::<(), anyhow::Error>(());
+                        }
+                        if data == "admin:start" {
+                            adm.on_callback_start(&bot, &q).await;
                             return Ok::<(), anyhow::Error>(());
                         }
                         if data == "toggle_sub" {

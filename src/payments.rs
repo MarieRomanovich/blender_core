@@ -229,4 +229,12 @@ impl Payments {
             let _ = fs::remove_file(&self.disabled_marker);
         }
     }
+
+    // Single-button helper to compose keyboards
+    pub fn pay_button(&self) -> InlineKeyboardButton {
+        InlineKeyboardButton::callback(
+            format!("Pay {} {}", self.amount, self.asset),
+            "pay:start",
+        )
+    }
 }
