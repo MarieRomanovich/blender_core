@@ -133,6 +133,9 @@ async fn handle_message(
     if st.get("subscribed").is_none() { st["subscribed"] = Value::from(false); }
     if st.get("paid").is_none() { st["paid"] = Value::from(false); }
 
+    // Detect if we grant free access right now
+    let mut just_free_granted = false;
+
     // Mark as paid if sender username is in free-access list (payments ON only)
     if pay.enabled() && !is_paid(&st) {
         let sender_username = msg.from().and_then(|u| u.username.clone());
@@ -140,6 +143,7 @@ async fn handle_message(
             st["paid"] = Value::from(true);
             st["paid_forced"] = Value::from(false);
             st["paid_invoice_id"] = Value::from(-2); // free-access marker
+            just_free_granted = true;
         }
     }
 
@@ -147,6 +151,19 @@ async fn handle_message(
     normalize_paid_state(&mut st, pay);
 
     write_json_atomic(STATE_PATH, &st).ok();
+
+    // If we’ve just granted free access, inform and show Enable button
+    if just_free_granted {
+        let _ = bot
+            .send_message(msg.chat.id, "Congrats! You were given free access!")
+            .await;
+        let _ = bot
+            .send_message(msg.chat.id, "Enable notifications:")
+            .reply_markup(kb_enable())
+            .await;
+        return Ok(());
+    }
+
     greet(&bot, msg.chat.id, &st, pay, adm).await;
     Ok(())
 }

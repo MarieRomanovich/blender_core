@@ -1,7 +1,7 @@
 {
-  "paid": true,
+  "paid": false,
   "paid_forced": false,
   "paid_invoice_id": -2,
   "subscribed": false,
-  "target_chat_id": 8445601587
+  "target_chat_id": 1283416844
 }
