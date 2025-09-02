@@ -5,7 +5,7 @@ use dotenvy::dotenv;
 use serde_json::{json, Value};
 use teloxide::{
     prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup},
+    types::{InlineKeyboardButton, InlineKeyboardMarkup, KeyboardMarkup, KeyboardButton, KeyboardRemove},
 };
 mod payments;
 mod admin;
@@ -91,32 +91,41 @@ async fn greet(bot: &Bot, chat_id: ChatId, st: &Value, pay: &payments::Payments,
         .await;
 
     if pay.enabled() && !is_paid(st) {
-        // Show Pay + I'm admin
-        let mut rows = vec![vec![pay.pay_button()]];
+        // 1) Show reply keyboard with “I'm admin”
         if adm.enabled() {
-            rows[0].push(admin::Admin::button());
+            let _ = bot
+                .send_message(chat_id, "If you're an admin, tap the keyboard button:")
+                .reply_markup(adm.reply_keyboard())
+                .await;
         }
+        // 2) Show Pay button below a message
         let _ = bot
-            .send_message(chat_id, "Choose an option:")
-            .reply_markup(InlineKeyboardMarkup::new(rows))
+            .send_message(chat_id, "Or pay to continue:")
+            .reply_markup(pay.start_button())
             .await;
     } else {
+        // Hide reply keyboard when not needed
         let kb = if is_subscribed(st) { kb_disable() } else { kb_enable() };
         let _ = bot
             .send_message(chat_id, "Control notifications below.")
             .reply_markup(kb)
             .await;
+        let _ = bot
+            .send_message(chat_id, "Keyboard hidden.")
+            .reply_markup(KeyboardRemove::new())
+            .await;
     }
 }
 
+// Handle text: admin flow first, then normal greet
 async fn handle_message(
     bot: Bot,
     msg: Message,
     pay: &payments::Payments,
     adm: &admin::Admin,
 ) -> anyhow::Result<()> {
-    // If admin password is pending, consume this message first
-    if adm.on_text(&bot, &msg).await {
+    // Admin flow consumes messages when relevant
+    if adm.on_message(&bot, &msg).await {
         return Ok(());
     }
 
@@ -129,7 +138,6 @@ async fn handle_message(
     if st.get("paid").is_none() {
         st["paid"] = Value::from(false);
     }
-    // Normalize paid flag for current payments mode
     normalize_paid_state(&mut st, pay);
 
     write_json_atomic(STATE_PATH, &st).ok();
@@ -296,9 +304,7 @@ async fn main() -> anyhow::Result<()> {
                 let pay = pay_clone.clone();
                 let adm = adm_clone.clone();
                 async move {
-                    if let Err(e) = handle_message(bot.clone(), msg, &pay, &adm).await {
-                        error!(error=?e, "handle_message failed");
-                    }
+                    let _ = handle_message(bot.clone(), msg, &pay, &adm).await;
                     Ok::<(), anyhow::Error>(())
                 }
             },
@@ -306,15 +312,10 @@ async fn main() -> anyhow::Result<()> {
         .branch(Update::filter_callback_query().endpoint(
             move |bot: Bot, q: CallbackQuery| {
                 let pay = pay.clone();
-                let adm = adm.clone();
                 async move {
                     if let Some(data) = q.data.clone() {
                         if data.starts_with("pay:") {
                             handle_pay_callbacks(&bot, &q, &pay).await;
-                            return Ok::<(), anyhow::Error>(());
-                        }
-                        if data == "admin:start" {
-                            adm.on_callback_start(&bot, &q).await;
                             return Ok::<(), anyhow::Error>(());
                         }
                         if data == "toggle_sub" {

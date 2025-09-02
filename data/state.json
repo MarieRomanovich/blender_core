@@ -1,5 +1,5 @@
 {
-  "paid": false,
+  "paid": true,
   "paid_forced": false,
   "paid_invoice_id": -1,
   "subscribed": false,
