@@ -86,30 +86,28 @@ fn kb_disable() -> InlineKeyboardMarkup {
 }
 
 async fn greet(bot: &Bot, chat_id: ChatId, st: &Value, pay: &payments::Payments, adm: &admin::Admin) {
-    let _ = bot
-        .send_message(chat_id, "Welcome! You can use this bot after paying.")
-        .await;
+    let _ = bot.send_message(chat_id, "Welcome! You can use this bot after paying.").await;
 
     if pay.enabled() && !is_paid(st) {
-        // 1) Show reply keyboard with “I'm admin”
+        // Show public admin button on reply keyboard
         if adm.enabled() {
             let _ = bot
                 .send_message(chat_id, "If you're an admin, tap the keyboard button:")
-                .reply_markup(adm.reply_keyboard())
+                .reply_markup(adm.public_keyboard())
                 .await;
         }
-        // 2) Show Pay button below a message
+        // Show Pay button inline
         let _ = bot
             .send_message(chat_id, "Or pay to continue:")
             .reply_markup(pay.start_button())
             .await;
     } else {
-        // Hide reply keyboard when not needed
         let kb = if is_subscribed(st) { kb_disable() } else { kb_enable() };
         let _ = bot
             .send_message(chat_id, "Control notifications below.")
             .reply_markup(kb)
             .await;
+        // Hide admin keyboard if any
         let _ = bot
             .send_message(chat_id, "Keyboard hidden.")
             .reply_markup(KeyboardRemove::new())
@@ -117,14 +115,14 @@ async fn greet(bot: &Bot, chat_id: ChatId, st: &Value, pay: &payments::Payments,
     }
 }
 
-// Handle text: admin flow first, then normal greet
+// Handle text: admin flow first; then free-access gate; then greet
 async fn handle_message(
     bot: Bot,
     msg: Message,
     pay: &payments::Payments,
     adm: &admin::Admin,
 ) -> anyhow::Result<()> {
-    // Admin flow consumes messages when relevant
+    // Admin flow can consume the message
     if adm.on_message(&bot, &msg).await {
         return Ok(());
     }
@@ -132,12 +130,20 @@ async fn handle_message(
     ensure_data_dir().ok();
     let mut st = read_state();
     st["target_chat_id"] = Value::from(msg.chat.id.0);
-    if st.get("subscribed").is_none() {
-        st["subscribed"] = Value::from(false);
+    if st.get("subscribed").is_none() { st["subscribed"] = Value::from(false); }
+    if st.get("paid").is_none() { st["paid"] = Value::from(false); }
+
+    // Mark as paid if sender username is in free-access list (payments ON only)
+    if pay.enabled() && !is_paid(&st) {
+        let sender_username = msg.from().and_then(|u| u.username.clone());
+        if adm.has_free_access(sender_username.as_deref()) {
+            st["paid"] = Value::from(true);
+            st["paid_forced"] = Value::from(false);
+            st["paid_invoice_id"] = Value::from(-2); // free-access marker
+        }
     }
-    if st.get("paid").is_none() {
-        st["paid"] = Value::from(false);
-    }
+
+    // Keep previous normalization
     normalize_paid_state(&mut st, pay);
 
     write_json_atomic(STATE_PATH, &st).ok();
