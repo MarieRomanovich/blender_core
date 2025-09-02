@@ -9,6 +9,7 @@ use teloxide::{
 };
 mod payments;
 mod admin;
+mod channels;
 use tracing::{error, info};
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -313,6 +314,7 @@ async fn main() -> anyhow::Result<()> {
     dotenv().ok();
     fmt().with_env_filter(EnvFilter::from_default_env()).init();
     ensure_data_dir().ok();
+    channels::init_db()?; // ensure SQLite is ready
 
     let token = env::var("TELEGRAM_BOT_TOKEN").context("TELEGRAM_BOT_TOKEN not set in .env")?;
     let bot = Bot::new(token);

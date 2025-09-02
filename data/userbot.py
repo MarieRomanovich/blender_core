@@ -1,4 +1,5 @@
 import asyncio, json, logging, os, ssl, sys, subprocess
+import sqlite3, time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -35,6 +36,8 @@ TMP_DIR.mkdir(exist_ok=True)
 
 STATE_PATH = DATA_DIR / "state.json"  # {"target_chat_id": int, "subscribed": bool, "paid": bool}
 
+DB_PATH = DATA_DIR / "bot.db"
+
 def load_json(path: Path, default):
     try:
         with path.open("r", encoding="utf-8") as f:
@@ -59,6 +62,20 @@ def display_title(chat) -> str:
         title = (fn + (" " + ln if ln else "")).strip()
     return title or getattr(chat, "username", None) or str(chat.id)
 
+def load_allowed_channel_ids() -> set[int]:
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM channels")
+            rows = cur.fetchall()
+            return {int(r[0]) for r in rows}
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning(f"Load channels failed: {e}")
+        return set()
+
 class Forwarder:
     def __init__(self, app: Client, bot_token: str):
         self.app = app
@@ -71,6 +88,8 @@ class Forwarder:
         insecure = os.getenv("TELEGRAM_SSL_INSECURE") == "1"
         self._ssl_ctx = None if insecure else ssl.create_default_context(cafile=certifi.where())
         self._insecure = insecure
+        self._allowed_ids: set[int] = set()
+        self._last_load: float = 0.0
 
     async def init_http(self):
         connector = TCPConnector(ssl=False) if self._insecure else TCPConnector(ssl=self._ssl_ctx)
@@ -152,13 +171,27 @@ class Forwarder:
             except Exception:
                 pass
 
+    def _reload_allowed_if_needed(self):
+        now = time.time()
+        if now - self._last_load > 10.0:
+            self._allowed_ids = load_allowed_channel_ids()
+            self._last_load = now
+
     async def on_message(self, _app: Client, m: Message):
         self._reload_state_if_changed()
+        self._reload_allowed_if_needed()
         if not self._target_chat_id or not (self._subscribed and self._paid):
             return
         if m.outgoing:
             return
         if m.from_user and m.from_user.is_bot:
+            return
+
+        # Only forward messages from channels present in DB
+        chat_type = getattr(m.chat, "type", None)
+        if chat_type != "channel":
+            return
+        if int(m.chat.id) not in self._allowed_ids:
             return
 
         title = display_title(m.chat)
