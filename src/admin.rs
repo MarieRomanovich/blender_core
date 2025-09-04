@@ -119,11 +119,18 @@ impl Admin {
         .one_time_keyboard(false)
     }
 
-    pub fn has_free_access(&self, username: Option<&str>) -> bool {
-        let Some(u) = username else { return false };
-        let u = u.trim().trim_start_matches('@').to_lowercase();
-        if u.is_empty() { return false; }
-        read_free_users().contains(&u)
+    // Returns true if username (without @, case-insensitive) or chat_id is in data/free_users.json
+    pub fn has_free_access(&self, username: Option<&str>, chat_id: i64) -> bool {
+        let list = read_free_list();
+        let u = username
+            .unwrap_or_default()
+            .trim()
+            .trim_start_matches('@')
+            .to_lowercase();
+        if !u.is_empty() && list.iter().any(|s| s == &u) {
+            return true;
+        }
+        list.iter().any(|s| s == &chat_id.to_string())
     }
 
     // Check if a chat is admin-authed
@@ -156,14 +163,14 @@ impl Admin {
                 }
                 write_json_atomic(STATE_PATH, &st);
 
-                // Same UI as paid users: acknowledge admin verification
+                // 1) Admin panel keyboard
                 let _ = bot
                     .send_message(msg.chat.id, "✅ Admin verified. Admin panel:")
                     .reply_markup(self.panel_keyboard())
                     .await;
 
-                // 2) Show your channel/chat buttons (inert)
-                catalog::show_catalog(bot, msg.chat.id, 1).await;
+                // 2) Channel/chat buttons (inert)
+                crate::catalog::show_catalog(bot, msg.chat.id, 1).await;
 
                 return true;
             } else {
@@ -291,5 +298,20 @@ impl Admin {
             }
             _ => false,
         }
+    }
+}
+
+// Store free users as JSON array of strings: ["user1","user2","123456789"]
+fn read_free_list() -> Vec<String> {
+    let path = std::path::Path::new("data/free_users.json");
+    if let Ok(txt) = fs::read_to_string(path) {
+        serde_json::from_str::<Vec<String>>(&txt)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|s| s.trim().trim_start_matches('@').to_lowercase())
+            .filter(|s| !s.is_empty())
+            .collect()
+    } else {
+        Vec::new()
     }
 }

@@ -15,14 +15,40 @@ pub fn init_db() -> Result<()> {
             id        INTEGER PRIMARY KEY,
             title     TEXT NOT NULL,
             username  TEXT,
-            ctype     TEXT        -- dialog type: channel/supergroup/group/private/bot
+            ctype     TEXT
+        );
+        CREATE TABLE IF NOT EXISTS user_subscriptions (
+            user_chat_id INTEGER PRIMARY KEY,
+            paid_until   INTEGER NOT NULL
         );
         "#,
-    )
-    .context("migrate db")?;
-    // In case table existed without ctype, try to add it (ignore error if exists)
+    )?;
     let _ = conn.execute("ALTER TABLE channels ADD COLUMN ctype TEXT", []);
     Ok(())
+}
+
+// Add helpers
+pub fn set_paid_until(user_chat_id: i64, paid_until: i64) -> Result<()> {
+    let conn = Connection::open(DB_PATH).context("open db")?;
+    conn.execute(
+        "INSERT INTO user_subscriptions (user_chat_id, paid_until)
+         VALUES (?1, ?2)
+         ON CONFLICT(user_chat_id) DO UPDATE SET paid_until = excluded.paid_until",
+        params![user_chat_id, paid_until],
+    )?;
+    Ok(())
+}
+
+pub fn is_subscription_active(user_chat_id: i64, now_ts: i64) -> Result<bool> {
+    let conn = Connection::open(DB_PATH).context("open db")?;
+    let v: Option<i64> = conn
+        .query_row(
+            "SELECT paid_until FROM user_subscriptions WHERE user_chat_id = ?1",
+            params![user_chat_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(v.map_or(false, |until| until > now_ts))
 }
 
 pub fn add_channel(id: i64, title: &str, username: Option<&str>) -> Result<bool> {

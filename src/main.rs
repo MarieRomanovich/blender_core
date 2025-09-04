@@ -151,46 +151,78 @@ async fn show_catalog(bot: &Bot, chat_id: ChatId, page: usize) {
 
 // ===== Flows (no notifications) =====
 
-async fn greet(bot: &Bot, chat_id: ChatId, st: &Value, pay: &payments::Payments, adm: &admin::Admin) {
-    if pay.enabled() && !is_paid(st) {
-        if adm.enabled() {
-            let _ = bot
-                .send_message(chat_id, "If you're an admin, tap the keyboard button:")
-                .reply_markup(adm.public_keyboard())
-                .await;
-        }
+fn now_ts() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+}
+fn subscription_days() -> i64 {
+    std::env::var("SUBSCRIPTION_DAYS").ok().and_then(|s| s.parse().ok()).filter(|&d| d > 0).unwrap_or(30)
+}
+
+// Show pay button if no active subscription; admins still see panel+catalog
+async fn greet(bot: &Bot, chat_id: ChatId, _st: &Value, pay: &payments::Payments, adm: &admin::Admin) {
+    if adm.enabled() {
         let _ = bot
-            .send_message(chat_id, "Pay to continue:")
-            .reply_markup(pay.start_button())
+            .send_message(chat_id, "If you're an admin, tap the keyboard button:")
+            .reply_markup(adm.public_keyboard())
             .await;
+    }
+
+    // Admins bypass paywall
+    if adm.is_authed(chat_id.0).await {
+        let _ = bot.send_message(chat_id, "Admin panel:").reply_markup(adm.panel_keyboard()).await;
+        crate::catalog::show_catalog(bot, chat_id, 1).await;
+        return;
+    }
+
+    if pay.enabled() {
+        let active = channels::is_subscription_active(chat_id.0, now_ts()).unwrap_or(false);
+        if active {
+            crate::catalog::show_catalog(bot, chat_id, 1).await;
+        } else {
+            // Changed: immediately create invoice and show CryptoBot URL
+            start_payment_flow(bot, chat_id, pay).await;
+        }
     } else {
-        show_catalog(bot, chat_id, 1).await;
+        crate::catalog::show_catalog(bot, chat_id, 1).await;
     }
 }
 
+// Start payment flow by creating an invoice and sending a URL button + check button
 async fn start_payment_flow(bot: &Bot, chat_id: ChatId, pay: &payments::Payments) {
     if !pay.enabled() {
-        let _ = bot.send_message(chat_id, "Payments are disabled right now.").await;
+        let _ = bot.send_message(chat_id, "Payments are disabled.").await;
         return;
     }
     match pay.create_invoice(None).await {
         Ok(inv) => {
-            let text = format!("Pay {} {} via CryptoBot, then tap “I’ve paid, check”.", inv.amount, inv.asset);
-            let _ = bot.send_message(chat_id, text).reply_markup(pay.check_button(&inv)).await;
+            let mut text = format!("Pay {} {} via CryptoBot, then tap “I’ve paid, check”.", inv.amount, inv.asset);
+            if let Some(url) = inv.pay_url.as_ref() {
+                text = format!("{text}\n\nPayment link: {url}");
+            }
+            let kb = InlineKeyboardMarkup::new(vec![
+                vec![InlineKeyboardButton::callback(
+                    "I’ve paid, check ✅",
+                    format!("pay:check:{}", inv.invoice_id),
+                )],
+            ]);
+            let _ = bot.send_message(chat_id, text).reply_markup(kb).await;
         }
         Err(e) => {
-            let _ = bot.send_message(chat_id, format!("Failed to start payment: {e}")).await;
+            let _ = bot
+                .send_message(chat_id, format!("Failed to create invoice: {e}"))
+                .await;
         }
     }
 }
 
+// Message handler: routes incoming messages to greet()
 async fn handle_message(
     bot: Bot,
     msg: Message,
     pay: &payments::Payments,
     adm: &admin::Admin,
 ) -> anyhow::Result<()> {
-    // Quick sanity
     if let Some(t) = msg.text() {
         if t.trim().eq_ignore_ascii_case("/ping") {
             bot.send_message(msg.chat.id, "pong").await?;
@@ -198,55 +230,33 @@ async fn handle_message(
         }
     }
 
-    // Admin flow can consume the message (admin panel kept minimal in admin.rs)
+    // Admin flow can consume messages (password prompts etc.)
     if adm.on_message(&bot, &msg).await {
         return Ok(());
     }
 
-    ensure_data_dir().ok();
-    let mut st = read_state();
-    st["target_chat_id"] = Value::from(msg.chat.id.0);
-    if st.get("paid").is_none() {
-        st["paid"] = Value::from(false);
-    }
-
-    // Grant free access for admins or users in free list
-    let mut just_free_granted = false;
-    if pay.enabled() && !is_paid(&st) {
-        let sender_username = msg.from().and_then(|u| u.username.clone());
-        if adm.has_free_access(sender_username.as_deref()) {
-            st["paid"] = Value::from(true);
-            st["paid_forced"] = Value::from(false);
-            st["paid_invoice_id"] = Value::from(-2); // free-access marker
-            just_free_granted = true;
-        }
-    }
-
-    normalize_paid_state(&mut st, pay);
-    write_json_atomic(STATE_PATH, &st).ok();
-
-    if just_free_granted {
-        let _ = bot.send_message(msg.chat.id, "Congrats! You were given free access!").await;
-        show_catalog(&bot, msg.chat.id, 1).await;
+    // Grant free access if user is in admin free list
+    let username = msg.from().and_then(|u| u.username.clone());
+    if adm.has_free_access(username.as_deref(), msg.chat.id.0) {
+        // Option A: mark a monthly subscription for them (extend on each message)
+        let _ = channels::set_paid_until(msg.chat.id.0, now_ts() + subscription_days() * 86_400);
+        crate::catalog::show_catalog(&bot, msg.chat.id, 1).await;
         return Ok(());
     }
 
+    // ...existing paywall/greet...
+    let st = serde_json::json!({}); // if you still use state, keep your existing read_state
     greet(&bot, msg.chat.id, &st, pay, adm).await;
     Ok(())
 }
 
+// Handle payment-related callback queries (minimal placeholder to satisfy call site)
 async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Payments) {
     let Some(data) = q.data.clone() else { return };
-    if data == "pay:start" {
-        if let Some(msg) = &q.message {
-            start_payment_flow(bot, msg.chat.id, pay).await;
-        }
-        let _ = bot.answer_callback_query(q.id.clone()).await;
-        return;
-    }
+
     if let Some(rest) = data.strip_prefix("pay:check:") {
-        let id = rest.parse::<i64>().unwrap_or_default();
-        if id == 0 {
+        let invoice_id = rest.parse::<i64>().unwrap_or_default();
+        if invoice_id == 0 {
             let _ = bot
                 .answer_callback_query(q.id.clone())
                 .text("Invalid invoice.")
@@ -254,24 +264,19 @@ async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Paym
                 .await;
             return;
         }
-        match pay.get_invoice(id).await {
-            Ok(Some(inv)) if inv.status == "paid" => {
-                // Mark paid and record invoice id
-                let mut st = read_state();
-                if let Some(msg) = &q.message {
-                    st["target_chat_id"] = Value::from(msg.chat.id.0);
-                }
-                st["paid"] = Value::from(true);
-                st["paid_forced"] = Value::from(false);
-                st["paid_invoice_id"] = Value::from(id);
-                let _ = write_json_atomic(STATE_PATH, &st);
 
+        match pay.get_invoice(invoice_id).await {
+            Ok(Some(inv)) if inv.status == "paid" => {
                 if let Some(msg) = &q.message {
+                    // grant subscription: now + SUBSCRIPTION_DAYS
+                    let expires = now_ts() + subscription_days() * 86_400;
+                    let _ = channels::set_paid_until(msg.chat.id.0, expires);
+
                     let _ = bot
                         .edit_message_text(
                             msg.chat.id,
                             msg.id,
-                            "✅ Payment succeeded. Browse your chats:",
+                            "✅ Payment succeeded. Access granted for 30 days.",
                         )
                         .await;
                     show_catalog(bot, msg.chat.id, 1).await;
@@ -310,7 +315,19 @@ async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Paym
                     .await;
             }
         }
+        return;
     }
+
+    // Optional: support a "pay:start" button if you use one
+    if data == "pay:start" {
+        if let Some(msg) = &q.message {
+            start_payment_flow(bot, msg.chat.id, pay).await;
+        }
+        let _ = bot.answer_callback_query(q.id.clone()).await;
+        return;
+    }
+
+    let _ = bot.answer_callback_query(q.id.clone()).await;
 }
 
 #[tokio::main]
