@@ -9,7 +9,7 @@ use std::{
 use serde_json::{json, Value};
 use teloxide::{
     prelude::*,
-    types::{KeyboardButton, KeyboardMarkup, KeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup},
+    types::{KeyboardButton, KeyboardMarkup}
 };
 use tokio::sync::RwLock;
 
@@ -22,9 +22,9 @@ const BTN_IM_ADMIN: &str = "I'm admin";
 const BTN_ADD: &str = "Add user";
 const BTN_REMOVE: &str = "Remove user";
 const BTN_LIST: &str = "List";
-const BTN_ADD_CH: &str = "Add channel";
-const BTN_REMOVE_CH: &str = "Remove channel";
-const BTN_LIST_CH: &str = "List channels";
+// const BTN_ADD_CH: &str = "Add channel";
+// const BTN_REMOVE_CH: &str = "Remove channel";
+// const BTN_LIST_CH: &str = "List channels";
 // const BTN_EXPORT_CSV: &str = "Export CSV";
 // const BTN_RELOAD_FROM_CSV: &str = "Reload channels";
 // Keep seed path consistent with main
@@ -109,16 +109,11 @@ impl Admin {
     pub fn panel_keyboard(&self) -> KeyboardMarkup {
         KeyboardMarkup::new(vec![
             vec![
-                KeyboardButton::new(BTN_ADD),
-                KeyboardButton::new(BTN_REMOVE),
-                KeyboardButton::new(BTN_LIST),
+                KeyboardButton::new(BTN_ADD),     // keep: add user
+                KeyboardButton::new(BTN_REMOVE),  // keep: remove user
+                KeyboardButton::new(BTN_LIST),    // keep: list users
             ],
-            vec![
-                KeyboardButton::new(BTN_ADD_CH),
-                KeyboardButton::new(BTN_REMOVE_CH),
-                KeyboardButton::new(BTN_LIST_CH),
-            ],
-            // Removed CSV management buttons
+            // Removed the row with channel buttons (Add/Remove/List channels)
         ])
         .resize_keyboard(true)
         .one_time_keyboard(false)
@@ -277,53 +272,21 @@ impl Admin {
                 let _ = bot.send_message(chat, "Send admin password:").await;
                 true
             }
-            BTN_ADD if is_authed => {
+            t if t == BTN_ADD && is_authed => {
                 self.pending_add.write().await.insert(chat_id);
                 let _ = bot.send_message(chat, "Send username to ADD (with or without @):").await;
                 true
             }
-            BTN_REMOVE if is_authed => {
+            t if t == BTN_REMOVE && is_authed => {
                 self.pending_remove.write().await.insert(chat_id);
                 let _ = bot.send_message(chat, "Send username to REMOVE (with or without @):").await;
                 true
             }
-            BTN_LIST if is_authed => {
+            t if t == BTN_LIST && is_authed => {
                 let mut set: Vec<_> = super::admin::read_free_users().into_iter().collect();
                 set.sort();
                 let list = if set.is_empty() { "No free-access users yet.".to_string() } else { format!("Free-access users:\n@{}", set.join("\n@")) };
                 let _ = bot.send_message(chat, list).await;
-                true
-            }
-            BTN_ADD_CH if is_authed => {
-                self.pending_add_ch.write().await.insert(chat_id);
-                let _ = bot.send_message(chat, "Forward a message from the CHANNEL to add:").await;
-                true
-            }
-            BTN_REMOVE_CH if is_authed => {
-                self.pending_remove_ch.write().await.insert(chat_id);
-                let _ = bot.send_message(chat, "Forward a message from the CHANNEL to remove:").await;
-                true
-            }
-            BTN_LIST_CH if is_authed => {
-                match crate::channels::list_channels() {
-                    Ok(list) if list.is_empty() => {
-                        let _ = bot.send_message(chat, "No channels in database.").await;
-                    }
-                    Ok(list) => {
-                        let mut buf = String::from("Channels:\n");
-                        for (id, title, username) in list {
-                            if let Some(u) = username {
-                                buf.push_str(&format!("- {} (@{}), id: {}\n", title, u, id));
-                            } else {
-                                buf.push_str(&format!("- {}, id: {}\n", title, id));
-                            }
-                        }
-                        let _ = bot.send_message(chat, buf).await;
-                    }
-                    Err(e) => {
-                        let _ = bot.send_message(chat, format!("❌ List failed: {e}")).await;
-                    }
-                }
                 true
             }
             _ => false,
