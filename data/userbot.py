@@ -38,6 +38,34 @@ STATE_PATH = DATA_DIR / "state.json"  # {"target_chat_id": int, "subscribed": bo
 
 DB_PATH = DATA_DIR / "bot.db"
 
+def load_allowed_channel_ids() -> set[int]:
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM channels")  # table now holds all dialog ids
+            return {int(r[0]) for r in cur.fetchall()}
+        finally:
+            conn.close()
+    except Exception:
+        return set()
+
+def load_user_selected_ids(user_chat_id: int) -> set[int]:
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT channel_id FROM user_selected_channels WHERE user_chat_id = ?",
+                (int(user_chat_id),),
+            )
+            rows = cur.fetchall()
+            return {int(r[0]) for r in rows}
+        finally:
+            conn.close()
+    except Exception:
+        return set()
+
 def load_json(path: Path, default):
     try:
         with path.open("r", encoding="utf-8") as f:
@@ -62,20 +90,6 @@ def display_title(chat) -> str:
         title = (fn + (" " + ln if ln else "")).strip()
     return title or getattr(chat, "username", None) or str(chat.id)
 
-def load_allowed_channel_ids() -> set[int]:
-    try:
-        conn = sqlite3.connect(str(DB_PATH))
-        try:
-            cur = conn.cursor()
-            cur.execute("SELECT id FROM channels")
-            rows = cur.fetchall()
-            return {int(r[0]) for r in rows}
-        finally:
-            conn.close()
-    except Exception as e:
-        logger.warning(f"Load channels failed: {e}")
-        return set()
-
 class Forwarder:
     def __init__(self, app: Client, bot_token: str):
         self.app = app
@@ -89,6 +103,7 @@ class Forwarder:
         self._ssl_ctx = None if insecure else ssl.create_default_context(cafile=certifi.where())
         self._insecure = insecure
         self._allowed_ids: set[int] = set()
+        self._selected_ids: set[int] = set()
         self._last_load: float = 0.0
 
     async def init_http(self):
@@ -175,6 +190,8 @@ class Forwarder:
         now = time.time()
         if now - self._last_load > 10.0:
             self._allowed_ids = load_allowed_channel_ids()
+            if self._target_chat_id:
+                self._selected_ids = load_user_selected_ids(self._target_chat_id)
             self._last_load = now
 
     async def on_message(self, _app: Client, m: Message):
@@ -187,11 +204,11 @@ class Forwarder:
         if m.from_user and m.from_user.is_bot:
             return
 
-        # Only forward messages from channels present in DB
-        chat_type = getattr(m.chat, "type", None)
-        if chat_type != "channel":
+        # Accept any dialog type; rely on DB allow-list and user selections
+        cid = int(m.chat.id)
+        if cid not in self._allowed_ids:
             return
-        if int(m.chat.id) not in self._allowed_ids:
+        if self._selected_ids and cid not in self._selected_ids:
             return
 
         title = display_title(m.chat)

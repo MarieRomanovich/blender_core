@@ -9,9 +9,11 @@ use std::{
 use serde_json::{json, Value};
 use teloxide::{
     prelude::*,
-    types::{KeyboardButton, KeyboardMarkup, KeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup, ChatId},
+    types::{KeyboardButton, KeyboardMarkup, KeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup},
 };
 use tokio::sync::RwLock;
+
+use crate::catalog;
 
 const STATE_PATH: &str = "data/state.json";
 const FREE_USERS_PATH: &str = "data/free_users.json";
@@ -23,6 +25,10 @@ const BTN_LIST: &str = "List";
 const BTN_ADD_CH: &str = "Add channel";
 const BTN_REMOVE_CH: &str = "Remove channel";
 const BTN_LIST_CH: &str = "List channels";
+// const BTN_EXPORT_CSV: &str = "Export CSV";
+// const BTN_RELOAD_FROM_CSV: &str = "Reload channels";
+// Keep seed path consistent with main
+const SEED_PATH: &str = "src/channels_seed.csv";
 
 fn write_json_atomic(path: &str, v: &Value) {
     let parent = Path::new(path).parent().unwrap();
@@ -33,6 +39,13 @@ fn write_json_atomic(path: &str, v: &Value) {
         let _ = f.write_all(&data);
         let _ = f.sync_all();
         let _ = fs::rename(&tmp_path, path);
+    }
+}
+
+fn read_state() -> Value {
+    match fs::read_to_string(STATE_PATH) {
+        Ok(s) => serde_json::from_str(&s).unwrap_or_else(|_| json!({})),
+        Err(_) => json!({}),
     }
 }
 
@@ -95,8 +108,17 @@ impl Admin {
     // Admin panel keyboard
     pub fn panel_keyboard(&self) -> KeyboardMarkup {
         KeyboardMarkup::new(vec![
-            vec![KeyboardButton::new(BTN_ADD), KeyboardButton::new(BTN_REMOVE), KeyboardButton::new(BTN_LIST)],
-            vec![KeyboardButton::new(BTN_ADD_CH), KeyboardButton::new(BTN_REMOVE_CH), KeyboardButton::new(BTN_LIST_CH)],
+            vec![
+                KeyboardButton::new(BTN_ADD),
+                KeyboardButton::new(BTN_REMOVE),
+                KeyboardButton::new(BTN_LIST),
+            ],
+            vec![
+                KeyboardButton::new(BTN_ADD_CH),
+                KeyboardButton::new(BTN_REMOVE_CH),
+                KeyboardButton::new(BTN_LIST_CH),
+            ],
+            // Removed CSV management buttons
         ])
         .resize_keyboard(true)
         .one_time_keyboard(false)
@@ -109,6 +131,11 @@ impl Admin {
         read_free_users().contains(&u)
     }
 
+    // Check if a chat is admin-authed
+    pub async fn is_authed(&self, chat_id: i64) -> bool {
+        self.authed.read().await.contains(&chat_id)
+    }
+
     // Returns true if the message was consumed by admin flow
     pub async fn on_message(&self, bot: &Bot, msg: &Message) -> bool {
         if !self.enabled() { return false; }
@@ -116,36 +143,38 @@ impl Admin {
         let Some(text) = msg.text() else { return false; };
         let chat_id = chat.0;
 
-        // If waiting for password
+        // If waiting for admin password, verify it
         if self.pending_pwd.read().await.contains(&chat_id) {
-            let ok = self.password.as_deref().map(|p| p == text).unwrap_or(false);
+            let ok = self.password.as_deref().map(|p| p == text.trim()).unwrap_or(false);
             if ok {
                 self.pending_pwd.write().await.remove(&chat_id);
                 self.authed.write().await.insert(chat_id);
 
-                // Hide any existing keyboard and show admin panel + enable button
-                let _ = bot
-                    .send_message(chat, "✅ Admin verified.")
-                    .reply_markup(KeyboardRemove::new())
-                    .await;
+                // Mark paid via admin (free access)
+                let mut st = read_state();
+                st["target_chat_id"] = Value::from(chat_id);
+                st["paid"] = Value::from(true);
+                st["paid_forced"] = Value::from(false);
+                st["paid_invoice_id"] = Value::from(-1); // admin-granted
+                if st.get("subscribed").is_none() {
+                    st["subscribed"] = Value::from(false);
+                }
+                write_json_atomic(STATE_PATH, &st);
 
-                // Offer enable notifications inline button
+                // Same UI as paid users: acknowledge admin verification
                 let _ = bot
-                    .send_message(chat, "Enable notifications:")
-                    .reply_markup(InlineKeyboardMarkup::new(vec![vec![
-                        InlineKeyboardButton::callback("Enable notifications", "toggle_sub"),
-                    ]]))
-                    .await;
-
-                // Show admin panel keyboard
-                let _ = bot
-                    .send_message(chat, "Admin panel:")
+                    .send_message(msg.chat.id, "✅ Admin verified. Admin panel:")
                     .reply_markup(self.panel_keyboard())
                     .await;
+
+                // 2) Show your channel/chat buttons (inert)
+                catalog::show_catalog(bot, msg.chat.id, 1).await;
+
+                return true;
             } else {
                 let _ = bot.send_message(chat, "❌ Wrong password. Try again.").await;
+                return true;
             }
-            return true;
         }
 
         // If waiting for add/remove username
