@@ -190,7 +190,7 @@ impl Payments {
 
     pub fn start_button(&self) -> InlineKeyboardMarkup {
         InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback(
-            format!("Pay {} {}", self.amount, self.asset),
+            format!("Оплатить {} {}", self.amount, self.asset),
             "pay:start",
         )]])
     }
@@ -200,13 +200,13 @@ impl Payments {
         if let Some(url_str) = &invoice.pay_url {
             if let Ok(url) = reqwest::Url::parse(url_str) {
                 rows.push(vec![InlineKeyboardButton::url(
-                    format!("Pay {} {}", self.amount, self.asset),
+                    format!("Оплатить {} {}", self.amount, self.asset),
                     url,
                 )]);
             }
         }
         rows.push(vec![InlineKeyboardButton::callback(
-            "I’ve paid, check",
+            "Я оплатил — проверить",
             format!("pay:check:{}", invoice.invoice_id),
         )]);
         InlineKeyboardMarkup::new(rows)
@@ -233,7 +233,7 @@ impl Payments {
     // Single-button helper to compose keyboards
     pub fn pay_button(&self) -> InlineKeyboardButton {
         InlineKeyboardButton::callback(
-            format!("Pay {} {}", self.amount, self.asset),
+            format!("Оплатить {} {}", self.amount, self.asset),
             "pay:start",
         )
     }

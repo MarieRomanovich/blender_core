@@ -1,19 +1,26 @@
-use std::{fs, io::Write, path::Path};
+use std::{env, fs, path::{Path, PathBuf}};
+use std::io::Write;
 
 use anyhow::Context;
 use dotenvy::dotenv;
+use grammers_client::{Client, Config};
+use grammers_session::Session;
 use serde_json::{json, Value};
 use teloxide::{
     prelude::*,
     types::{InlineKeyboardButton, InlineKeyboardMarkup},
 };
+use teloxide::types::{ChatId, CallbackQuery};
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 mod payments;
 mod admin;
 mod channels;
-mod catalog; // ensure this is declared if you use the module
+mod catalog;
+mod sync_history;
+mod forward; // add this import
+mod user_forward;
 
 const CHATS_EXPORT_PATH: &str = "src/chats_export.csv";
 
@@ -105,48 +112,21 @@ fn load_catalog() -> Vec<(i64, String, String)> {
     out
 }
 
-fn build_catalog_keyboard(page: usize) -> InlineKeyboardMarkup {
-    let items = load_catalog();
-    let total = items.len();
-    let pages = std::cmp::max(1, (total + PAGE_SIZE - 1) / PAGE_SIZE);
-    let cur = page.clamp(1, pages);
-    let start = (cur - 1) * PAGE_SIZE;
-    let end = std::cmp::min(start + PAGE_SIZE, total);
-
-    let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
-    for (_id, title, ctype) in &items[start..end] {
-        let text = format!("{} {}", type_icon(ctype), title);
-        // Inert buttons: clicking does nothing
-        rows.push(vec![InlineKeyboardButton::callback(text, "cat:noop".to_string())]);
-    }
-
-    if pages > 1 {
-        let mut nav = Vec::new();
-        if cur > 1 {
-            nav.push(InlineKeyboardButton::callback("⬅️ Prev", format!("cat:page:{}", cur - 1)));
-        }
-        nav.push(InlineKeyboardButton::callback(format!("Page {cur}/{pages}"), "cat:noop".to_string()));
-        if cur < pages {
-            nav.push(InlineKeyboardButton::callback("Next ➡️", format!("cat:page:{}", cur + 1)));
-        }
-        rows.push(nav);
-    }
-
-    InlineKeyboardMarkup::new(rows)
-}
-
-async fn show_catalog(bot: &Bot, chat_id: ChatId, page: usize) {
+async fn show_catalog(bot: &Bot, chat_id: ChatId, _page: usize) {
     let items = load_catalog();
     if items.is_empty() {
         let _ = bot
-            .send_message(chat_id, "No chats found in src/chats_export.csv")
+            .send_message(chat_id, "В файле src/chats_export.csv не найдено чатов")
             .await;
         return;
     }
-    let _ = bot
-        .send_message(chat_id, "Browse your chats (buttons are inert):")
-        .reply_markup(build_catalog_keyboard(page))
-        .await;
+
+    // Send catalog as plain text (no buttons)
+    let mut body = String::from("Доступные чаты:\n\n");
+    for (_id, title, ctype) in items.iter().take(1000) {
+        body.push_str(&format!("{} {}\n", type_icon(ctype), title));
+    }
+    let _ = bot.send_message(chat_id, body).await;
 }
 
 // ===== Flows (no notifications) =====
@@ -163,14 +143,14 @@ fn subscription_days() -> i64 {
 async fn greet(bot: &Bot, chat_id: ChatId, _st: &Value, pay: &payments::Payments, adm: &admin::Admin) {
     if adm.enabled() {
         let _ = bot
-            .send_message(chat_id, "If you're an admin, tap the keyboard button:")
+            .send_message(chat_id, "Если вы админ, нажмите кнопку на клавиатуре:")
             .reply_markup(adm.public_keyboard())
             .await;
     }
 
     // Admins bypass paywall
     if adm.is_authed(chat_id.0).await {
-        let _ = bot.send_message(chat_id, "Admin panel:").reply_markup(adm.panel_keyboard()).await;
+        let _ = bot.send_message(chat_id, "Панель администратора:").reply_markup(adm.panel_keyboard()).await;
         crate::catalog::show_catalog(bot, chat_id, 1).await;
         return;
     }
@@ -191,18 +171,18 @@ async fn greet(bot: &Bot, chat_id: ChatId, _st: &Value, pay: &payments::Payments
 // Start payment flow by creating an invoice and sending a URL button + check button
 async fn start_payment_flow(bot: &Bot, chat_id: ChatId, pay: &payments::Payments) {
     if !pay.enabled() {
-        let _ = bot.send_message(chat_id, "Payments are disabled.").await;
+        let _ = bot.send_message(chat_id, "Платежи отключены.").await;
         return;
     }
     match pay.create_invoice(None).await {
         Ok(inv) => {
-            let mut text = format!("Pay {} {} via CryptoBot, then tap “I’ve paid, check”.", inv.amount, inv.asset);
+            let mut text = format!("Оплатите {} {} через CryptoBot, затем нажмите «Я оплатил — проверить».", inv.amount, inv.asset);
             if let Some(url) = inv.pay_url.as_ref() {
-                text = format!("{text}\n\nPayment link: {url}");
+                text = format!("{text}\n\nСсылка для оплаты: {url}");
             }
             let kb = InlineKeyboardMarkup::new(vec![
                 vec![InlineKeyboardButton::callback(
-                    "I’ve paid, check ✅",
+                    "Я оплатил — проверить ✅",
                     format!("pay:check:{}", inv.invoice_id),
                 )],
             ]);
@@ -210,7 +190,7 @@ async fn start_payment_flow(bot: &Bot, chat_id: ChatId, pay: &payments::Payments
         }
         Err(e) => {
             let _ = bot
-                .send_message(chat_id, format!("Failed to create invoice: {e}"))
+                .send_message(chat_id, format!("Не удалось создать счёт: {e}"))
                 .await;
         }
     }
@@ -223,11 +203,106 @@ async fn handle_message(
     pay: &payments::Payments,
     adm: &admin::Admin,
 ) -> anyhow::Result<()> {
+    // --- forwarding: configure source/target via env (or hardcode) ---
+    if let Ok(src_str) = std::env::var("FORWARD_SOURCE") {
+        if let Ok(dst_str) = std::env::var("FORWARD_TARGET") {
+            if let (Ok(src_id), Ok(dst_id)) = (src_str.parse::<i64>(), dst_str.parse::<i64>()) {
+                // try forward and short-circuit if forwarded
+                if let Ok(true) = forward::try_forward(&bot, &msg, src_id, dst_id).await {
+                    return Ok(());
+                }
+            }
+        }
+    }
+    // --- end forwarding ---
+
     if let Some(t) = msg.text() {
         if t.trim().eq_ignore_ascii_case("/ping") {
             bot.send_message(msg.chat.id, "pong").await?;
             return Ok(());
         }
+
+        // admin-only start sync command:
+        if t.trim().starts_with("/sync_history") {
+            // format: /sync_history <source_chat_id> <target_chat_id>
+            if !adm.is_authed(msg.chat.id.0).await {
+                let _ = bot.send_message(msg.chat.id, "Только админ может запустить синхронизацию").await;
+                return Ok(());
+            }
+            let parts: Vec<&str> = t.split_whitespace().collect();
+            if parts.len() < 3 {
+                let _ = bot.send_message(msg.chat.id, "Использование: /sync_history <source_id> <target_id>").await;
+                return Ok(());
+            }
+            let src: i64 = match parts[1].parse() {
+                Ok(v) => v,
+                Err(_) => {
+                    let _ = bot.send_message(msg.chat.id, "Неверный ID источника").await;
+                    return Ok(());
+                }
+            };
+            let dst: i64 = match parts[2].parse() {
+                Ok(v) => v,
+                Err(_) => {
+                    let _ = bot.send_message(msg.chat.id, "Неверный ID назначения").await;
+                    return Ok(());
+                }
+            };
+
+            // read MTProto envs
+            let api_id: i32 = match std::env::var("API_ID").and_then(|s| s.parse::<i32>().map_err(|_| std::env::VarError::NotPresent)) {
+                Ok(v) => v,
+                Err(_) => {
+                    let _ = bot.send_message(msg.chat.id, "API_ID не установлен или неверен").await;
+                    return Ok(());
+                }
+            };
+            let api_hash = match std::env::var("API_HASH") {
+                Ok(v) => v,
+                Err(_) => {
+                    let _ = bot.send_message(msg.chat.id, "API_HASH не установлен").await;
+                    return Ok(());
+                }
+            };
+            let session_path = std::env::var("MTPROTO_SESSION").unwrap_or_else(|_| "mtproto.session".into());
+            let map_path = std::env::var("TOPIC_MAP_JSON").unwrap_or_else(|_| "topic_map.json".into());
+            let topic_map = if std::path::Path::new(&map_path).exists() {
+                match std::fs::read_to_string(&map_path).and_then(|s| serde_json::from_str::<std::collections::HashMap<i32,i32>>(&s).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))) {
+                    Ok(m) => Some(m),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
+
+            let reply = bot.send_message(msg.chat.id, format!("Запуск синхронизации: {} -> {} (в фоне)", src, dst)).await;
+
+            // spawn background task
+            let api_hash_clone = api_hash.clone();
+            tokio::spawn(async move {
+                if let Err(e) = sync_history::sync_history(
+                    api_id,
+                    &api_hash_clone,
+                    PathBuf::from(session_path),
+                    src,
+                    dst,
+                    topic_map.as_ref(),
+                )
+                .await
+                {
+                    tracing::error!("sync_history failed: {:?}", e);
+                } else {
+                    tracing::info!("sync_history finished");
+                }
+            });
+
+            // reply user
+            if let Ok(s) = reply {
+                let _ = bot.send_message(s.chat.id, "Синхронизация запущена (см. логи).").await;
+            }
+            return Ok(());
+        }
+        // end sync command
     }
 
     // Admin flow can consume messages (password prompts etc.)
@@ -238,9 +313,12 @@ async fn handle_message(
     // Grant free access if user is in admin free list
     let username = msg.from().and_then(|u| u.username.clone());
     if adm.has_free_access(username.as_deref(), msg.chat.id.0) {
-        // Option A: mark a monthly subscription for them (extend on each message)
+        // mark a monthly subscription for them
         let _ = channels::set_paid_until(msg.chat.id.0, now_ts() + subscription_days() * 86_400);
-        crate::catalog::show_catalog(&bot, msg.chat.id, 1).await;
+        // send dynamic invite link
+        send_channel_invite(&bot, msg.chat.id).await;
+        // show catalog as plain text
+        show_catalog(&bot, msg.chat.id, 1).await;
         return Ok(());
     }
 
@@ -250,8 +328,53 @@ async fn handle_message(
     Ok(())
 }
 
+// Try dynamic invite creation (preferred). Fallback to CHANNEL_INVITE_LINK env var.
+// Requires bot to be admin in the channel (with permission to invite/create invite links).
+async fn send_channel_invite(bot: &Bot, to_chat: ChatId) {
+    // Try CHANNEL_ID env first (numeric chat id, e.g. -1001234567890)
+    if let Ok(chan_str) = std::env::var("CHANNEL_ID") {
+        if let Ok(chan_id) = chan_str.parse::<i64>() {
+            let channel = ChatId(chan_id);
+
+            // Try to create a single-use invite link via the typed Bot API
+            if let Ok(inv) = bot.create_chat_invite_link(channel).member_limit(1).await {
+                let link = inv.invite_link;
+                let _ = bot
+                    .send_message(to_chat, format!("Доступ предоставлен — присоединяйтесь к каналу: {link}"))
+                    .await;
+                return;
+            }
+
+            // Fallback: export the primary invite link
+            if let Ok(link) = bot.export_chat_invite_link(channel).await {
+                let _ = bot
+                    .send_message(to_chat, format!("Доступ предоставлен — присоединяйтесь к каналу: {link}"))
+                    .await;
+                return;
+            }
+        }
+    }
+
+    // Last resort: static invite link from env
+    match std::env::var("CHANNEL_INVITE_LINK") {
+        Ok(link) if !link.is_empty() => {
+            let _ = bot
+                .send_message(to_chat, format!("Доступ предоставлен — присоединяйтесь к каналу: {link}"))
+                .await;
+        }
+        _ => {
+            let _ = bot
+                .send_message(
+                    to_chat,
+                    "Доступ предоставлен, но CHANNEL_ID / CHANNEL_INVITE_LINK не заданы или создание ссылки не удалось. Обратитесь к администратору за ссылкой-приглашением.",
+                )
+                .await;
+        }
+    }
+}
+
 // Handle payment-related callback queries (minimal placeholder to satisfy call site)
-async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Payments) {
+async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Payments, adm: &admin::Admin) {
     let Some(data) = q.data.clone() else { return };
 
     if let Some(rest) = data.strip_prefix("pay:check:") {
@@ -259,7 +382,7 @@ async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Paym
         if invoice_id == 0 {
             let _ = bot
                 .answer_callback_query(q.id.clone())
-                .text("Invalid invoice.")
+                .text("Неверный счёт.")
                 .show_alert(true)
                 .await;
             return;
@@ -276,41 +399,45 @@ async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Paym
                         .edit_message_text(
                             msg.chat.id,
                             msg.id,
-                            "✅ Payment succeeded. Access granted for 30 days.",
+                            "✅ Платёж подтверждён. Доступ предоставлен на 30 дней.",
                         )
                         .await;
-                    show_catalog(bot, msg.chat.id, 1).await;
+
+                    // If the user is NOT an admin, send the invite link (dynamic)
+                    if !adm.is_authed(msg.chat.id.0).await {
+                        send_channel_invite(bot, msg.chat.id).await;
+                    }
                 }
                 let _ = bot
                     .answer_callback_query(q.id.clone())
-                    .text("Payment confirmed ✅")
+                    .text("Платёж подтверждён ✅")
                     .await;
             }
             Ok(Some(inv)) if inv.status == "active" => {
                 let _ = bot
                     .answer_callback_query(q.id.clone())
-                    .text("Still unpaid. Complete the payment and try again.")
+                    .text("Платёж не завершён. Завершите оплату и попробуйте ещё раз.")
                     .show_alert(true)
                     .await;
             }
             Ok(Some(inv)) => {
                 let _ = bot
                     .answer_callback_query(q.id.clone())
-                    .text(format!("Status: {}", inv.status))
+                    .text(format!("Статус: {}", inv.status))
                     .show_alert(true)
                     .await;
             }
             Ok(None) => {
                 let _ = bot
                     .answer_callback_query(q.id.clone())
-                    .text("Invoice not found.")
+                    .text("Счёт не найден.")
                     .show_alert(true)
                     .await;
             }
             Err(e) => {
                 let _ = bot
                     .answer_callback_query(q.id.clone())
-                    .text(format!("Check failed: {e}"))
+                    .text(format!("Ошибка проверки: {e}"))
                     .show_alert(true)
                     .await;
             }
@@ -318,7 +445,6 @@ async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Paym
         return;
     }
 
-    // Optional: support a "pay:start" button if you use one
     if data == "pay:start" {
         if let Some(msg) = &q.message {
             start_payment_flow(bot, msg.chat.id, pay).await;
@@ -330,9 +456,106 @@ async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Paym
     let _ = bot.answer_callback_query(q.id.clone()).await;
 }
 
+// Add this helper (place near other async helpers)
+async fn handle_pay_callback(
+    bot: &Bot,
+    q: CallbackQuery,
+    pay: payments::Payments,
+    adm: admin::Admin,
+) {
+    let qid = q.id.clone();
+    let data = match q.data.clone() {
+        Some(d) => d,
+        None => {
+            let _ = bot.answer_callback_query(qid).await;
+            return;
+        }
+    };
+
+    tracing::info!(callback_data = %data, chat = ?q.message.as_ref().map(|m| m.chat.id), "callback received");
+
+    // Ack quickly so UI is responsive
+    let _ = bot.answer_callback_query(qid.clone()).await;
+
+    if data == "pay:start" {
+        if let Some(msg) = &q.message {
+            start_payment_flow(bot, msg.chat.id, &pay).await;
+        }
+        return;
+    }
+
+    if let Some(id_str) = data.strip_prefix("pay:check:") {
+        match id_str.parse::<i64>() {
+            Ok(invoice_id) if invoice_id != 0 => {
+                tracing::info!(invoice_id, "checking invoice");
+                match pay.get_invoice(invoice_id).await {
+                    Ok(Some(inv)) => {
+                        tracing::info!(invoice_id, status = %inv.status, "invoice fetched");
+                        match inv.status.as_str() {
+                            "paid" => {
+                                if let Some(msg) = &q.message {
+                                    let expires = now_ts() + subscription_days() * 86_400;
+                                    let _ = channels::set_paid_until(msg.chat.id.0, expires);
+                                    let _ = bot
+                                        .edit_message_text(msg.chat.id, msg.id, "✅ Payment succeeded. Access granted.")
+                                        .await;
+                                    if !adm.is_authed(msg.chat.id.0).await {
+                                        send_channel_invite(bot, msg.chat.id).await;
+                                    }
+                                }
+                                let _ = bot.answer_callback_query(qid).text("Payment confirmed ✅").await;
+                            }
+                            "active" => {
+                                let _ = bot
+                                    .answer_callback_query(qid)
+                                    .text("Still unpaid. Complete the payment and try again.")
+                                    .show_alert(true)
+                                    .await;
+                            }
+                            other => {
+                                let _ = bot
+                                    .answer_callback_query(qid)
+                                    .text(format!("Status: {}", other))
+                                    .show_alert(true)
+                                    .await;
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        let _ = bot
+                            .answer_callback_query(qid)
+                            .text("Invoice not found.")
+                            .show_alert(true)
+                            .await;
+                    }
+                    Err(e) => {
+                        tracing::error!(error = ?e, "get_invoice failed");
+                        let _ = bot
+                            .answer_callback_query(qid)
+                            .text(format!("Check failed: {}", e))
+                            .show_alert(true)
+                            .await;
+                    }
+                }
+            }
+            _ => {
+                let _ = bot
+                    .answer_callback_query(qid)
+                    .text("Invalid invoice id")
+                    .show_alert(true)
+                    .await;
+            }
+        }
+        return;
+    }
+
+    // fallback ack (already acked above, but keep for safety)
+    let _ = bot.answer_callback_query(qid).await;
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenv().ok(); // load .env first
+    dotenv().ok();
     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     ensure_data_dir().ok();
@@ -350,13 +573,17 @@ async fn main() -> anyhow::Result<()> {
     let pay = payments::Payments::new_from_env()?;
     let adm = admin::Admin::new_from_env();
 
+    // --- spawn history sync on start if requested ---
+    // history sync removed; no background spawn
+
     // Clone for closures
     let pay_msg = pay.clone();
     let adm_msg = adm.clone();
     let pay_cb = pay.clone();
+    let adm_cb = adm.clone();
 
     // Dispatcher
-    let handler = dptree::entry()
+    let handler = teloxide::dptree::entry()
         .branch(Update::filter_message().endpoint(
             move |bot: Bot, msg: Message| {
                 let pay = pay_msg.clone();
@@ -383,30 +610,12 @@ async fn main() -> anyhow::Result<()> {
         .branch(Update::filter_callback_query().endpoint(
             move |bot: Bot, q: CallbackQuery| {
                 let pay = pay_cb.clone();
+                let adm = adm_cb.clone();
                 async move {
-                    if let Some(data) = q.data.clone() {
-                        // Payments
-                        if data.starts_with("pay:") {
-                            handle_pay_callbacks(&bot, &q, &pay).await;
-                            return Ok::<(), anyhow::Error>(());
-                        }
-                        // Catalog pagination
-                        if let Some(rest) = data.strip_prefix("cat:page:") {
-                            let page = rest.parse::<usize>().unwrap_or(1);
-                            if let Some(msg) = &q.message {
-                                let _ = bot
-                                    .edit_message_reply_markup(msg.chat.id, msg.id)
-                                    .reply_markup(catalog::build_catalog_keyboard(page))
-                                    .await;
-                            }
-                            let _ = bot.answer_callback_query(q.id.clone()).await;
-                            return Ok::<(), anyhow::Error>(());
-                        }
-                        // Inert buttons
-                        if data == "cat:noop" {
-                            let _ = bot.answer_callback_query(q.id.clone()).await;
-                            return Ok::<(), anyhow::Error>(());
-                        }
+                    if q.data.is_some() {
+                        handle_pay_callback(&bot, q, pay, adm).await;
+                    } else {
+                        let _ = bot.answer_callback_query(q.id.clone()).await;
                     }
                     Ok::<(), anyhow::Error>(())
                 }

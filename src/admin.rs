@@ -18,10 +18,10 @@ use crate::catalog;
 const STATE_PATH: &str = "data/state.json";
 const FREE_USERS_PATH: &str = "data/free_users.json";
 
-const BTN_IM_ADMIN: &str = "I'm admin";
-const BTN_ADD: &str = "Add user";
-const BTN_REMOVE: &str = "Remove user";
-const BTN_LIST: &str = "List";
+const BTN_IM_ADMIN: &str = "Я админ";
+const BTN_ADD: &str = "Добавить пользователя";
+const BTN_REMOVE: &str = "Удалить пользователя";
+const BTN_LIST: &str = "Список";
 // const BTN_ADD_CH: &str = "Add channel";
 // const BTN_REMOVE_CH: &str = "Remove channel";
 // const BTN_LIST_CH: &str = "List channels";
@@ -165,16 +165,15 @@ impl Admin {
 
                 // 1) Admin panel keyboard
                 let _ = bot
-                    .send_message(msg.chat.id, "✅ Admin verified. Admin panel:")
+                    .send_message(msg.chat.id, "✅ Вы авторизованы как админ. Панель администратора:")
                     .reply_markup(self.panel_keyboard())
                     .await;
 
-                // 2) Channel/chat buttons (inert)
-                crate::catalog::show_catalog(bot, msg.chat.id, 1).await;
-
+                // Also show folders
+                
                 return true;
             } else {
-                let _ = bot.send_message(chat, "❌ Wrong password. Try again.").await;
+                let _ = bot.send_message(chat, "❌ Неверный пароль. Попробуйте ещё раз.").await;
                 return true;
             }
         }
@@ -187,15 +186,15 @@ impl Admin {
                 save_free_users(&set);
                 let _ = bot
                     .send_message(chat, if inserted {
-                        format!("✅ Added @{}", u)
+                        format!("✅ Добавлен @{}", u)
                     } else {
-                        format!("ℹ️ @{} is already in the list", u)
+                        format!("ℹ️ @{} уже в списке", u)
                     })
                     .await;
                 self.pending_add.write().await.remove(&chat_id);
-                let _ = bot.send_message(chat, "Admin panel:").reply_markup(self.panel_keyboard()).await;
+                let _ = bot.send_message(chat, "Панель администратора:").reply_markup(self.panel_keyboard()).await;
             } else {
-                let _ = bot.send_message(chat, "Send a valid username (with or without @).").await;
+                let _ = bot.send_message(chat, "Отправьте корректное имя пользователя (с @ или без).").await;
             }
             return true;
         }
@@ -207,15 +206,15 @@ impl Admin {
                 save_free_users(&set);
                 let _ = bot
                     .send_message(chat, if removed {
-                        format!("✅ Removed @{}", u)
+                        format!("✅ Удалён @{}", u)
                     } else {
-                        format!("ℹ️ @{} was not in the list", u)
+                        format!("ℹ️ @{} отсутствовал в списке", u)
                     })
                     .await;
                 self.pending_remove.write().await.remove(&chat_id);
-                let _ = bot.send_message(chat, "Admin panel:").reply_markup(self.panel_keyboard()).await;
+                let _ = bot.send_message(chat, "Панель администратора:").reply_markup(self.panel_keyboard()).await;
             } else {
-                let _ = bot.send_message(chat, "Send a valid username (with or without @).").await;
+                let _ = bot.send_message(chat, "Отправьте корректное имя пользователя (с @ или без).").await;
             }
             return true;
         }
@@ -239,10 +238,10 @@ impl Admin {
                         if self.pending_add_ch.read().await.contains(&chat_id) {
                             match crate::channels::add_channel(ch_id, title.as_str(), username) {
                                 Ok(_) => {
-                                    let _ = bot.send_message(ChatId(chat_id), format!("✅ Added channel: {} (id: {})", title, ch_id)).await;
+                                    let _ = bot.send_message(ChatId(chat_id), format!("✅ Канал добавлен: {} (id: {})", title, ch_id)).await;
                                 }
                                 Err(e) => {
-                                    let _ = bot.send_message(ChatId(chat_id), format!("❌ Add failed: {e}")).await;
+                                    let _ = bot.send_message(ChatId(chat_id), format!("❌ Не удалось добавить: {e}")).await;
                                 }
                             }
                             self.pending_add_ch.write().await.remove(&chat_id);
@@ -250,25 +249,25 @@ impl Admin {
                             match crate::channels::remove_channel(ch_id) {
                                 Ok(removed) => {
                                     let _ = bot.send_message(ChatId(chat_id), if removed {
-                                        format!("✅ Removed channel id: {}", ch_id)
+                                        format!("✅ Канал с id {} удалён", ch_id)
                                     } else {
-                                        format!("ℹ️ Channel id {} not found", ch_id)
+                                        format!("ℹ️ Канал с id {} не найден", ch_id)
                                     }).await;
                                 }
                                 Err(e) => {
-                                    let _ = bot.send_message(ChatId(chat_id), format!("❌ Remove failed: {e}")).await;
+                                    let _ = bot.send_message(ChatId(chat_id), format!("❌ Не удалось удалить: {e}")).await;
                                 }
                             }
                             self.pending_remove_ch.write().await.remove(&chat_id);
                         }
 
-                        let _ = bot.send_message(ChatId(chat_id), "Admin panel:").reply_markup(self.panel_keyboard()).await;
+                        let _ = bot.send_message(ChatId(chat_id), "Панель администратора:").reply_markup(self.panel_keyboard()).await;
                         return true;
                     }
                 }
             }
             let _ = bot
-                .send_message(ChatId(chat_id), "Please forward a message from the target channel here.")
+                .send_message(ChatId(chat_id), "Перешлите сообщение из нужного канала сюда.")
                 .await;
             return true;
         }
@@ -276,23 +275,23 @@ impl Admin {
         match text.trim() {
             BTN_IM_ADMIN => {
                 self.pending_pwd.write().await.insert(chat_id);
-                let _ = bot.send_message(chat, "Send admin password:").await;
+                let _ = bot.send_message(chat, "Отправьте пароль администратора:").await;
                 true
             }
             t if t == BTN_ADD && is_authed => {
                 self.pending_add.write().await.insert(chat_id);
-                let _ = bot.send_message(chat, "Send username to ADD (with or without @):").await;
+                let _ = bot.send_message(chat, "Отправьте имя пользователя для ДОБАВЛЕНИЯ (с @ или без):").await;
                 true
             }
             t if t == BTN_REMOVE && is_authed => {
                 self.pending_remove.write().await.insert(chat_id);
-                let _ = bot.send_message(chat, "Send username to REMOVE (with or without @):").await;
+                let _ = bot.send_message(chat, "Отправьте имя пользователя для УДАЛЕНИЯ (с @ или без):").await;
                 true
             }
             t if t == BTN_LIST && is_authed => {
                 let mut set: Vec<_> = super::admin::read_free_users().into_iter().collect();
                 set.sort();
-                let list = if set.is_empty() { "No free-access users yet.".to_string() } else { format!("Free-access users:\n@{}", set.join("\n@")) };
+                let list = if set.is_empty() { "Пока нет пользователей с бесплатным доступом.".to_string() } else { format!("Пользователи с бесплатным доступом:\n@{}", set.join("\n@")) };
                 let _ = bot.send_message(chat, list).await;
                 true
             }
