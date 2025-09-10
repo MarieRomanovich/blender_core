@@ -1,3 +1,5 @@
+use csv::ReaderBuilder;
+use tokio::fs as tokio_fs;
 use std::{env, fs, io::Write, path::{Path, PathBuf}, time::Duration};
 use tokio::time::sleep;
 use teloxide::types::{InputFile, ChatId};
@@ -296,6 +298,11 @@ async fn show_catalog(bot: &Bot, chat_id: ChatId, _page: usize) {
     let _ = bot.send_message(chat_id, body).await;
 }
 
+// Backward-compat helper used by greet(): show titles from chats_export.csv.
+async fn send_chat_titles(bot: &Bot, chat_id: ChatId) {
+    show_catalog(bot, chat_id, 1).await;
+}
+
 // ===== Flows (no notifications) =====
 
 fn now_ts() -> i64 {
@@ -419,6 +426,9 @@ async fn greet(bot: &Bot, chat_id: ChatId, _st: &Value, pay: &payments::Payments
             Err(e) => tracing::error!(chat = ?chat_id, error = ?e, "greet: failed to send text+keyboard"),
         }
     }
+
+    // After the greeting, send the titles from chats_export.csv (if present)
+    send_chat_titles(bot, chat_id).await;
 
     // delete the previous single-dot public keyboard marker so the greeting message stays last
     {
