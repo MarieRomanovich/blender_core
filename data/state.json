@@ -1,7 +1,8 @@
 {
-  "paid": true,
-  "paid_forced": false,
-  "paid_invoice_id": -1,
-  "subscribed": false,
-  "target_chat_id": 6312794668
+  "keyboard_msgs": {
+    "6312794668": 1108
+  },
+  "public_keyboard_msgs": {
+    "6312794668": 1113
+  }
 }
