@@ -9,7 +9,7 @@ use std::{
 use serde_json::{json, Value};
 use teloxide::{
     prelude::*,
-    types::{KeyboardButton, KeyboardMarkup}
+    types::{KeyboardButton, KeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup}
 };
 use tokio::sync::RwLock;
 
@@ -106,17 +106,12 @@ impl Admin {
     }
 
     // Admin panel keyboard
-    pub fn panel_keyboard(&self) -> KeyboardMarkup {
-        KeyboardMarkup::new(vec![
-            vec![
-                KeyboardButton::new(BTN_ADD),     // keep: add user
-                KeyboardButton::new(BTN_REMOVE),  // keep: remove user
-                KeyboardButton::new(BTN_LIST),    // keep: list users
-            ],
-            // Removed the row with channel buttons (Add/Remove/List channels)
+    pub fn panel_keyboard(&self) -> InlineKeyboardMarkup {
+        InlineKeyboardMarkup::new(vec![
+            vec![InlineKeyboardButton::callback("Добавить пользователя".to_string(), "admin:add_free".to_string())],
+            vec![InlineKeyboardButton::callback("Удалить пользователя".to_string(), "admin:remove_free".to_string())],
+            vec![InlineKeyboardButton::callback("Список".to_string(), "admin:show_free".to_string())],
         ])
-        .resize_keyboard(true)
-        .one_time_keyboard(false)
     }
 
     // Returns true if username (without @, case-insensitive) or chat_id is in data/free_users.json
@@ -297,6 +292,53 @@ impl Admin {
             }
             _ => false,
         }
+    }
+
+    /// Handle inline callback queries for admin panel buttons.
+    /// Returns true if handled.
+    pub async fn handle_callback(&self, bot: &Bot, cq: CallbackQuery) -> bool {
+        let data = cq.data.unwrap_or_default();
+        let user_id = cq.from.id.0 as i64;
+
+        // answer to stop spinner early
+        let _ = bot.answer_callback_query(&cq.id).await;
+
+        // require auth
+        if !self.is_authed(user_id).await {
+            let _ = bot
+                .send_message(ChatId(user_id), "Доступ запрещён. Пожалуйста, авторизуйтесь.")
+                .await;
+            return true;
+        }
+
+        match data.as_str() {
+            "admin:add_free" => {
+                self.pending_add.write().await.insert(user_id);
+                let _ = bot
+                    .send_message(ChatId(user_id), "Отправьте username для ДОБАВЛЕНИЯ (с @ или без):")
+                    .await;
+            }
+            "admin:remove_free" => {
+                self.pending_remove.write().await.insert(user_id);
+                let _ = bot
+                    .send_message(ChatId(user_id), "Отправьте username для УДАЛЕНИЯ (с @ или без):")
+                    .await;
+            }
+            "admin:show_free" => {
+                let mut set: Vec<_> = read_free_list().into_iter().collect();
+                set.sort();
+                let text = if set.is_empty() {
+                    "Пока нет пользователей с бесплатным доступом.".to_string()
+                } else {
+                    format!("Пользователи с бесплатным доступом:\n@{}", set.join("\n@"))
+                };
+                let _ = bot.send_message(ChatId(user_id), text).await;
+            }
+            _ => {
+                // unhandled admin callback
+            }
+        }
+        true
     }
 }
 

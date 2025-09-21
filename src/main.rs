@@ -546,7 +546,49 @@ async fn handle_message(
     if let Some(t) = msg.text() {
         // quick /start reply for testing bot responsiveness
         if t.trim().starts_with("/start") {
-            let _ = bot.send_message(msg.chat.id, "Привет! Бот в сети.").await;
+            let username = msg.from().and_then(|u| u.username.clone());
+            if adm.has_free_access(username.as_deref(), msg.chat.id.0) {
+                // grant free access: mark subscription, write to subs.json, send folders message
+                let expires = now_ts() + subscription_days() * 86_400;
+                let _ = channels::set_paid_until(msg.chat.id.0, expires);
+                // write to subs.json
+                let user_id = msg.chat.id.0 as i64;
+                if let Err(e) = pay.add_or_renew_subscriber(user_id, None, 1) {
+                    eprintln!("free access: add_or_renew_subscriber failed: {:?}", e);
+                }
+                if let Err(e) = pay.append_subscription_record(user_id, 1) {
+                    eprintln!("free access: append_subscription_record failed: {:?}", e);
+                }
+                // send folders message
+                let aktiv_url = reqwest::Url::parse("https://t.me/addlist/Q3mkHDAfwjYyYjU0").ok();
+                let ludiki_url = reqwest::Url::parse("https://t.me/addlist/TyvbTgRFp5QwY2Y0").ok();
+                let farm_url = reqwest::Url::parse("https://t.me/addlist/qzsI2WN7hXExNTdk").ok();
+                let other_url = reqwest::Url::parse("https://t.me/addlist/Gy2SNd_HDPNjNmY0").ok();
+
+                let make_btn = |label: &str, url_opt: Option<reqwest::Url>, cb: &str| {
+                    url_opt
+                        .map(|u| InlineKeyboardButton::url(label.to_string(), u))
+                        .unwrap_or_else(|| InlineKeyboardButton::callback(label.to_string(), cb.to_string()))
+                };
+
+                let mut rows = Vec::new();
+                rows.push(vec![
+                    make_btn("АКТИВНОСТИ +", aktiv_url, "show_folder:aktivnosti"),
+                    make_btn("ЛУДИКИ", ludiki_url, "show_folder:ludiki"),
+                ]);
+                rows.push(vec![
+                    make_btn("Фармилка", farm_url, "show_folder:farmilka"),
+                    make_btn("Прочее", other_url, "show_folder:other"),
+                ]);
+                let kb = InlineKeyboardMarkup::new(rows);
+
+                let _ = bot.send_message(msg.chat.id, "Папки с каналами:").reply_markup(kb).await;
+                // send invite
+                send_channel_invite(&bot, msg.chat.id).await;
+            } else {
+                // plain user: send startup message with pay button
+                send_startup_to_user(&bot, msg.chat.id).await;
+            }
             return Ok(());
         }
         if t.trim().eq_ignore_ascii_case("/ping") {
@@ -626,12 +668,56 @@ async fn handle_message(
             }
             return Ok(());
         }
+
+        // NEW: handle admin pending actions
+        let user_id = msg.chat.id.0;
+        let mut st = read_state();
+        if is_admin_pending(&st, user_id, "add_free") {
+            set_admin_pending(&mut st, user_id, None);
+            let username = t.trim().trim_start_matches('@').to_string();  // FIXED: strip @ to match check
+            let mut free_users = load_free_users();
+            if free_users.insert(username.clone()) {
+                if let Err(e) = save_free_users(&free_users) {
+                    eprintln!("failed to save free users: {:?}", e);
+                    let _ = bot.send_message(msg.chat.id, "Ошибка сохранения.").await;
+                } else {
+                    let _ = bot.send_message(msg.chat.id, format!("Пользователь {} добавлен в бесплатный доступ.", username)).await;
+                }
+            } else {
+                let _ = bot.send_message(msg.chat.id, "Пользователь уже в списке.").await;
+            }
+            if let Err(e) = write_json_atomic(STATE_PATH, &st) {
+                eprintln!("failed to clear admin pending: {:?}", e);
+            }
+            return Ok(());
+        }
+        if is_admin_pending(&st, user_id, "remove_free") {
+            set_admin_pending(&mut st, user_id, None);
+            let username = t.trim().trim_start_matches('@').to_string();  // FIXED: strip @ to match check
+            let mut free_users = load_free_users();
+            if free_users.remove(&username) {
+                if let Err(e) = save_free_users(&free_users) {
+                    eprintln!("failed to save free users: {:?}", e);
+                    let _ = bot.send_message(msg.chat.id, "Ошибка сохранения.").await;
+                } else {
+                    let _ = bot.send_message(msg.chat.id, format!("Пользователь {} удалён из бесплатного доступа.", username)).await;
+                }
+            } else {
+                let _ = bot.send_message(msg.chat.id, "Пользователь не найден в списке.").await;
+            }
+            if let Err(e) = write_json_atomic(STATE_PATH, &st) {
+                eprintln!("failed to clear admin pending: {:?}", e);
+            }
+            return Ok(());
+        }
     }
 
     // Admin flow can consume messages (password prompts etc.)
     if adm.on_message(&bot, &msg).await {
         // ensure the persistent "I'm admin" keyboard exists and remains last
         ensure_persistent_public_keyboard(&bot, msg.chat.id, &adm).await;
+        // NEW: Show admin panel keyboard after login
+        let _ = bot.send_message(msg.chat.id, "Панель администратора:").reply_markup(adm.panel_keyboard()).await;
         return Ok::<(), anyhow::Error>(());
     }
 
@@ -673,6 +759,56 @@ fn load_first_month_usernames() -> HashSet<String> {
             }
         }
         Err(_) => HashSet::new(),
+    }
+}
+
+// Load free users from src/free.json as a set of usernames
+fn load_free_users() -> HashSet<String> {
+    let path = "src/free.json";  // CHANGED: from "data/free_users.json" to "src/free.json" for consistency with first_month.json
+    match fs::read_to_string(path) {
+        Ok(s) => {
+            if let Ok(Value::Array(arr)) = serde_json::from_str(&s) {
+                arr.into_iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            } else {
+                HashSet::new()
+            }
+        }
+        Err(_) => HashSet::new(),
+    }
+}
+
+// Save free users to src/free.json
+fn save_free_users(free_users: &HashSet<String>) -> anyhow::Result<()> {
+    let path = "src/free.json";  // CHANGED: from "data/free_users.json" to "src/free.json" for consistency
+    let arr: Vec<Value> = free_users.iter().map(|s| Value::String(s.clone())).collect();
+    let data = serde_json::to_string_pretty(&arr)?;
+    fs::write(path, data)?;
+    Ok(())
+}
+
+// Check if user has an admin pending action
+fn is_admin_pending(st: &Value, user_id: i64, action: &str) -> bool {
+    st.get("admin_pending")
+        .and_then(|v| v.as_object())
+        .and_then(|obj| obj.get(&user_id.to_string()))
+        .and_then(|v| v.as_str())
+        .map(|s| s == action)
+        .unwrap_or(false)
+}
+
+// Set admin pending action for user
+fn set_admin_pending(st: &mut Value, user_id: i64, action: Option<&str>) {
+    if !st.get("admin_pending").is_some() {
+        st["admin_pending"] = json!({});
+    }
+    if let Some(obj) = st["admin_pending"].as_object_mut() {
+        if let Some(act) = action {
+            obj.insert(user_id.to_string(), Value::String(act.to_string()));
+        } else {
+            obj.remove(&user_id.to_string());
+        }
     }
 }
 
@@ -860,14 +996,14 @@ async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Paym
                         .await;
 
                     // Send admin panel message and ensure the public "I'm admin" keyboard is present
-                    // Panel (visible) so admins can start working immediately
-                    if let Err(e) = bot
-                        .send_message(msg.chat.id, "Панель администратора:")
-                        .reply_markup(adm.panel_keyboard())
-                        .await
-                    {
-                        tracing::warn!(chat = ?msg.chat.id, error = ?e, "failed to send admin panel after payment");
-                    }
+                    // REMOVED: Panel (visible) so admins can start working immediately
+                    // REMOVED: if let Err(e) = bot
+                    // REMOVED:     .send_message(msg.chat.id, "Панель администратора:")
+                    // REMOVED:     .reply_markup(adm.panel_keyboard())
+                    // REMOVED:     .await
+                    // REMOVED: {
+                    // REMOVED:     tracing::warn!(chat = ?msg.chat.id, error = ?e, "failed to send admin panel after payment");
+                    // REMOVED: }
                     // Ensure persistent public keyboard with "I'm admin" button
                     ensure_persistent_public_keyboard(bot, msg.chat.id, adm).await;
 
@@ -1150,7 +1286,6 @@ async fn main() -> anyhow::Result<()> {
 ⚫️maloletoff
 ⚫️Картель
 ⚫️ARBUZ REBORN
-⚫️Tertuh | Degenlord
 
 Прочее:
 
@@ -1160,40 +1295,35 @@ async fn main() -> anyhow::Result<()> {
 ⚫️YouTube HUB - много инфы по англ. ютубу
 
 ⚫️ BLENDER club - тут мы делаем выжимки и подсвечиваем самую интересную инфу из выше перечислиных приваток, колим то в что сами заходим и делаем."#;
-
-                    // send the list
                     let _ = bot.send_message(chat, body).await;
 
-                    // Offer a "pay" button under the list (create invoice for this user)
-                    let user_id = q.from.id.0 as i64;
-                    if user_id != 0 && payments.enabled() {
-                        match payments.create_invoice(Some(user_id.to_string())).await {
-                            Ok(inv) => {
-                                // build keyboard: first row -> "Продлить подписку" (URL), second row -> "Я оплатил — проверить"
-                                let mut rows = Vec::new();
-                                if let Some(url_str) = inv.pay_url.as_deref() {
-                                    if let Ok(url) = reqwest::Url::parse(url_str) {
-                                        rows.push(vec![InlineKeyboardButton::url(
-                                            "Продлить подписку".to_string(),
-                                            url,
-                                        )]);
-                                    }
+                    // create invoice for payment
+                    match payments.create_invoice(Some(q.from.id.0.to_string())).await {
+                        Ok(inv) => {
+                            // build keyboard: first row -> "Продлить подписку" (URL), second row -> "Я оплатил — проверить"
+                            let mut rows = Vec::new();
+                            if let Some(url_str) = inv.pay_url.as_deref() {
+                                if let Ok(url) = reqwest::Url::parse(url_str) {
+                                    rows.push(vec![InlineKeyboardButton::url(
+                                        "Продлить подписку".to_string(),
+                                        url,
+                                    )]);
                                 }
-                                rows.push(vec![InlineKeyboardButton::callback(
-                                    "Я оплатил — проверить",
-                                    format!("pay:check:{}", inv.invoice_id),
-                                )]);
-                                let kb = InlineKeyboardMarkup::new(rows);
+                            }
+                            rows.push(vec![InlineKeyboardButton::callback(
+                                "Я оплатил — проверить",
+                                format!("pay:check:{}", inv.invoice_id),
+                            )]);
+                            let kb = InlineKeyboardMarkup::new(rows);
 
-                                let mut text = "Если хотите получить доступ — оплатите счёт:".to_string();
-                                if let Some(url) = inv.pay_url.as_ref() {
-                                    text = format!("{text}\n\nСсылка для оплаты: {url}");
-                                }
-                                let _ = bot.send_message(chat, text).reply_markup(kb).await;
+                            let mut text = "Если хотите получить доступ — оплатите счёт:".to_string();
+                            if let Some(url) = inv.pay_url.as_ref() {
+                                text = format!("{text}\n\nСсылка для оплаты: {url}");
                             }
-                            Err(e) => {
-                                tracing::warn!(error = ?e, "show_channels_cb: failed to create invoice; skipping invoice send");
-                            }
+                            let _ = bot.send_message(chat, text).reply_markup(kb).await;
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = ?e, "show_channels_cb: failed to create invoice; skipping invoice send");
                         }
                     }
 
@@ -1202,13 +1332,66 @@ async fn main() -> anyhow::Result<()> {
             }
         });
  
-    // combine handlers
+    // new callback handler for "admin:*" callbacks
+    let admin_cb_handler = Update::filter_callback_query()
+    .filter(|q: CallbackQuery| q.data.as_deref().map_or(false, |d| d.starts_with("admin:")))
+    .endpoint({
+        let adm = adm.clone();
+        move |bot: Bot, q: CallbackQuery| {
+            let adm = adm.clone();
+            async move {
+                // debug log incoming admin callback
+                let data = q.data.clone().unwrap_or_default();
+                let uid = q.from.id.0;
+                tracing::info!(user = uid, callback_data = %data, "admin callback received");
+
+                // quick auth check here to give immediate feedback and avoid silent failures
+                let authed = adm.is_authed(uid as i64).await;
+                if !authed {
+                    let _ = bot.answer_callback_query(q.id.clone()).text("Доступ запрещён.").await;
+                    tracing::warn!(user = uid, "admin callback denied (not authed)");
+                    return respond(());
+                }
+
+                // handle admin actions directly here (set pending, send prompts, show list)
+                if data == "admin:add_free" {
+                    let mut st = read_state();
+                    set_admin_pending(&mut st, uid as i64, Some("add_free"));
+                    if let Err(e) = write_json_atomic(STATE_PATH, &st) {
+                        eprintln!("failed to set admin pending: {:?}", e);
+                    }
+                    let _ = bot.send_message(ChatId(uid as i64), "Отправьте username для ДОБАВЛЕНИЯ (с @ или без):").await;
+                } else if data == "admin:remove_free" {
+                    let mut st = read_state();
+                    set_admin_pending(&mut st, uid as i64, Some("remove_free"));
+                    if let Err(e) = write_json_atomic(STATE_PATH, &st) {
+                        eprintln!("failed to set admin pending: {:?}", e);
+                    }
+                    let _ = bot.send_message(ChatId(uid as i64), "Отправьте username для УДАЛЕНИЯ (с @ или без):").await;
+                } else if data == "admin:show_free" {
+                    let free_users = load_free_users();
+                    let list = if free_users.is_empty() {
+                        "Пока нет пользователей с бесплатным доступом.".to_string()
+                    } else {
+                        free_users.iter().map(|u| format!("@{}", u)).collect::<Vec<_>>().join("\n")
+                    };
+                    let _ = bot.send_message(ChatId(uid as i64), format!("Бесплатные пользователи:\n{}", list)).await;
+                }
+
+                let _ = bot.answer_callback_query(q.id.clone()).await;
+                respond(())
+            }
+        }
+    });
+ 
+    // ensure admin_cb_handler is branched into your dispatcher
     let handler = dptree::entry()
         .branch(cb_handler)
         .branch(start_msg_handler)
         .branch(full_msg_handler)
         .branch(debug_msg_logger)
-        .branch(show_channels_cb);
+        .branch(show_channels_cb)
+        .branch(admin_cb_handler);
  
     Dispatcher::builder(bot.clone(), handler)
         .build()
@@ -1380,48 +1563,3 @@ async fn ensure_persistent_admin_keyboard(bot: &Bot, chat_id: ChatId, adm: &admi
         }
     }
 
-    // Move this function inside the appropriate impl block, e.g.:
-    impl payments::Payments {
-        /// Unban all users with active subscriptions (from subs.json ledger) from chats in chats_csv (default "chats2.csv").
-        pub async fn unban_all_active_subscribers(&self, bot: &Bot, chats_csv: Option<&str>) -> anyhow::Result<Vec<(i64,i64)>> {
-            let latest_expiries = self.load_latest_expiries_from_subs()?;
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
-    
-            let active_users: Vec<i64> = latest_expiries
-                .iter()
-                .filter(|&(_, &exp)| exp > now)
-                .map(|(&user_id, _)| user_id)
-                .collect();
-    
-            if active_users.is_empty() {
-                return Ok(vec![]);
-            }
-    
-            let csv_path = chats_csv.unwrap_or("chats2.csv");
-            let chats = match self.load_target_chats(csv_path) {
-                Ok(c) if !c.is_empty() => c,
-                _ => return Ok(vec![]),
-            };
-    
-            let mut attempted = Vec::new();
-            for user_id in active_users {
-                for &chat in &chats {
-                    match bot.unban_chat_member(ChatId(chat), UserId(user_id as u64)).await {
-                        Ok(_) => {
-                            attempted.push((user_id, chat));
-                        }
-                        Err(err) => {
-                            eprintln!("Failed to unban {} from {}: {:?}", user_id, chat, err);
-                            attempted.push((user_id, chat));
-                        }
-                    }
-                }
-            }
-    
-            Ok(attempted)
-        }
-    }
-    // End of impl block
