@@ -1,0 +1,20 @@
+[
+  {
+    "user_id": 123456789,
+    "username": "alice",
+    "added_at": 1,
+    "expires_at": 1697366400
+  },
+  {
+    "user_id": 234567890,
+    "username": null,
+    "added_at": 1,
+    "expires_at": null
+  },
+  {
+    "user_id": 1283416844,
+    "username": null,
+    "added_at": 1758450466,
+    "expires_at": 1768818466
+  }
+]

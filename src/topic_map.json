@@ -1,0 +1,39 @@
+{
+   
+  "mappings": [
+
+  {
+    "source": {
+      "name": "0x cherry",
+      "chat_id": -1002820338492,
+      "thread_id": 7,
+      "scan_limit": 50000
+    },
+    "target": {
+      "name": "Канал B",
+      "chat_id": -1003033010374,
+      "thread_id": 2773,
+      "scan_limit": 50000
+    }
+  },
+  {
+    "source": {
+      "name": "0x cherry",
+      "chat_id": -1002820338492,
+      "thread_id": 68,
+      "scan_limit": 50000
+    },
+    "target": {
+      "name": "Канал B",
+      "chat_id": -1003033010374,
+      "thread_id": 2775,
+      "scan_limit": 50000
+    }
+  
+    
+    } 
+
+  ]
+
+
+}

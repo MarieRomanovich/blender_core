@@ -1,0 +1,1002 @@
+use csv::ReaderBuilder;
+use tokio::fs as tokio_fs;
+use std::{env, fs, io::Write, path::{Path, PathBuf}, time::Duration};
+use tokio::time::sleep;
+use teloxide::types::{InputFile, ChatId};
+
+use anyhow::Context;
+use dotenvy::dotenv;
+use grammers_client::{reply_markup, Client, Config};
+use grammers_session::Session;
+use serde_json::{json, Value};
+use teloxide::{
+    prelude::*,
+    types::{InlineKeyboardButton, InlineKeyboardMarkup},
+};
+// Additional imports for dptree-style dispatcher and Payments type
+use teloxide::{dispatching::HandlerExt, dispatching::UpdateFilterExt, dptree};
+use crate::payments::Payments;
+use teloxide::types::{CallbackQuery};
+use teloxide::prelude::*;
+use std::sync::Arc;
+
+mod payments;
+mod admin;
+mod channels;
+mod catalog;
+mod forward; 
+mod user_forward;
+
+const CHATS_EXPORT_PATH: &str = "src/chats_export.csv";
+
+const DATA_DIR: &str = "data";
+const STATE_PATH: &str = "data/state.json"; // {"target_chat_id": i64, "subscribed": bool, "paid": bool}
+
+fn ensure_data_dir() -> anyhow::Result<()> {
+    fs::create_dir_all(DATA_DIR).context("create data dir")?;
+    Ok(())
+}
+
+async fn send_startup_to_all(bot: &Bot) {
+    // message to send (exact text provided)
+    let startup_msg = r#"Лучшее что ты можешь сделать прямо сейчас - ДЕЙСТВОВАТЬ !
+
+Коротко о BLENDER — множество приваток, которые я лично отбирал с 2019 года и это самый дешевый и самый качественный агрегатор который вы могли только найти.
+
+Наш канал: t.me/blender
+Поддержка: @ex_managers
+
+🔻 Сумма всех приваток: 7394$/мес
+✅ Сумма всех приваток у нас: 42$/мес "#;
+
+    // optional image path or URL from env
+    let startup_img = std::env::var("STARTUP_IMG").ok();
+
+    // file with recipients: JSON array of chat ids or usernames
+    let file = std::env::var("STARTUP_ALL_FILE").unwrap_or_else(|_| "data/subscribers.json".to_string());
+
+    let data = match fs::read_to_string(&file) {
+        Ok(s) => s,
+        Err(e) => {
+            log::warn!("send_startup_to_all: failed to read {}: {}", file, e);
+            return;
+        }
+    };
+
+    let list: Value = match serde_json::from_str(&data) {
+        Ok(v) => v,
+        Err(e) => {
+            log::warn!("send_startup_to_all: failed to parse {} as JSON: {}", file, e);
+            return;
+        }
+    };
+
+    let mut recipients = Vec::new();
+    if let Value::Array(arr) = list {
+        for v in arr {
+            match v {
+                Value::String(s) => recipients.push(s),
+                Value::Number(n) => recipients.push(n.to_string()),
+                _ => continue,
+            }
+        }
+    } else {
+        log::warn!("send_startup_to_all: {} is not a JSON array", file);
+        return;
+    }
+
+    for r in recipients {
+        // try numeric id first
+        if let Ok(id) = r.parse::<i64>() {
+            let chat = ChatId(id);
+            if let Some(ref img) = startup_img {
+                match bot.send_photo(chat, InputFile::file(img.clone()))
+                    .caption(startup_msg.to_string())
+                    .await
+                {
+                    Ok(_) => log::info!("startup: sent photo+caption to id {}", id),
+                    Err(e) => log::warn!("startup: failed to send photo to id {}: {}", id, e),
+                }
+            } else {
+                match bot.send_message(chat, startup_msg.to_string()).await {
+                    Ok(_) => log::info!("startup: sent text to id {}", id),
+                    Err(e) => log::warn!("startup: failed to send to id {}: {}", id, e),
+                }
+            }
+        } else {
+            // username / channel string
+            if let Some(ref img) = startup_img {
+                match bot.send_photo(r.clone(), InputFile::file(img.clone()))
+                    .caption(startup_msg.to_string())
+                    .await
+                {
+                    Ok(_) => log::info!("startup: sent photo+caption to {}", r),
+                    Err(e) => log::warn!("startup: failed to send photo to {}: {}", r, e),
+                }
+            } else {
+                match bot.send_message(r.clone(), startup_msg.to_string()).await {
+                    Ok(_) => log::info!("startup: sent text to {}", r),
+                    Err(e) => log::warn!("startup: failed to send to {}: {}", r, e),
+                }
+            }
+        }
+        sleep(Duration::from_millis(300)).await; // rate-limit delay
+    }
+}
+
+async fn send_startup_to_target(bot: &Bot) {
+    // Default caption (exact text provided)
+    let startup_msg = r#"Лучшее что ты можешь сделать прямо сейчас - ДЕЙСТВОВАТЬ !
+
+Коротко о BLENDER — множество приваток, которые я лично отбирал с 2019 года и это самый дешевый и самый качественный агрегатор который вы могли только найти.
+
+Наш канал: t.me/blender
+Поддержка: @ex_managers
+
+🔻 Сумма всех приваток: 7394$/мес
+✅ Сумма всех приваток у нас: 42$/мес "#;
+
+    // get target from env
+    let target_raw = env::var("TARGET_CHANNEL")
+        .or_else(|_| env::var("CHANNEL_ID"))
+        .unwrap_or_default();
+
+    if target_raw.is_empty() {
+        tracing::warn!("send_startup_to_target: TARGET_CHANNEL not set; skipping startup send");
+        return;
+    }
+
+    // sanitize STARTUP_IMG
+    let mut img_opt = env::var("STARTUP_IMG").ok();
+    if let Some(ref s) = img_opt {
+        img_opt = Some(s.trim().trim_matches('"').to_string());
+    }
+    // fallback: if no STARTUP_IMG env, try data/startup.jpg
+    if img_opt.is_none() {
+        let fb = Path::new("data").join("startup.jpg");
+        if fb.exists() {
+            img_opt = Some(fb.to_string_lossy().to_string());
+            tracing::info!(target = %target_raw, startup_img = ?img_opt, "send_startup_to_target: using fallback STARTUP_IMG");
+        } else {
+            tracing::info!(target = %target_raw, startup_img = ?img_opt, "send_startup_to_target: STARTUP_IMG not set and no fallback found");
+        }
+    }
+
+    // resolve chat id or username and send
+    let send_result = if let Ok(id) = target_raw.parse::<i64>() {
+        let chat = ChatId(id);
+        if let Some(ref img) = img_opt {
+            if Path::new(img).exists() {
+                bot.send_photo(chat, InputFile::file(img.clone()))
+                    .caption(startup_msg.to_string())
+                    .await
+            } else {
+                tracing::warn!("send_startup_to_target: image not found at {} — sending text only", img);
+                bot.send_message(chat, startup_msg.to_string()).await
+            }
+        } else {
+            bot.send_message(chat, startup_msg.to_string()).await
+        }
+    } else {
+        // treat as username/channel string
+        let chat_str = target_raw.clone();
+        if let Some(ref img) = img_opt {
+            if Path::new(img).exists() {
+                bot.send_photo(chat_str.clone(), InputFile::file(img.clone()))
+                    .caption(startup_msg.to_string())
+                    .await
+            } else {
+                tracing::warn!("send_startup_to_target: image not found at {} — sending text only", img);
+                bot.send_message(chat_str.clone(), startup_msg.to_string()).await
+            }
+        } else {
+            bot.send_message(chat_str.clone(), startup_msg.to_string()).await
+        }
+    };
+
+    match send_result {
+        Ok(_) => tracing::info!("startup message sent to {}", target_raw),
+        Err(e) => tracing::error!("failed to send startup message to {}: {}", target_raw, e),
+    }
+
+    // small pause if you plan to do more startup actions
+    let _ = sleep(Duration::from_millis(300)).await;
+}
+
+fn read_state() -> Value {
+    match fs::read_to_string(STATE_PATH) {
+        Ok(s) => serde_json::from_str(&s).unwrap_or_else(|_| json!({})),
+        Err(_) => json!({}),
+    }
+}
+
+fn write_json_atomic(path: &str, v: &Value) -> anyhow::Result<()> {
+    let parent = Path::new(path).parent().unwrap();
+    fs::create_dir_all(parent).ok();
+    let tmp_path = format!("{path}.tmp");
+    let data = serde_json::to_vec_pretty(v)?;
+    {
+        let mut f = fs::File::create(&tmp_path)?;
+        f.write_all(&data)?;
+        let _ = f.sync_all();
+    }
+    fs::rename(&tmp_path, path)?;
+    Ok(())
+}
+
+fn is_paid(st: &Value) -> bool {
+    st.get("paid").and_then(|b| b.as_bool()).unwrap_or(false)
+}
+fn is_paid_forced(st: &Value) -> bool {
+    st.get("paid_forced").and_then(|b| b.as_bool()).unwrap_or(false)
+}
+
+// Normalize "paid" based on payments mode and presence of a confirmed invoice
+fn normalize_paid_state(st: &mut Value, pay: &payments::Payments) {
+    if !pay.enabled() {
+        st["paid"] = Value::from(true);
+        st["paid_forced"] = Value::from(true);
+        return;
+    }
+    if is_paid_forced(st) {
+        st["paid"] = Value::from(false);
+        st["paid_forced"] = Value::from(false);
+    }
+    let has_invoice = st.get("paid_invoice_id").and_then(|v| v.as_i64()).is_some();
+    if is_paid(st) && !has_invoice {
+        st["paid"] = Value::from(false);
+    }
+}
+
+// ===== Read-only catalog from chats_export.csv =====
+
+const PAGE_SIZE: usize = 10;
+
+fn type_icon(t: &str) -> &'static str {
+    match t {
+        "channel" => "📣",
+        "supergroup" => "👥",
+        "group" => "👥",
+        "private" => "👤",
+        "bot" => "🤖",
+        _ => "•",
+    }
+}
+
+// Returns Vec of (id, title, ctype)
+fn load_catalog() -> Vec<(i64, String, String)> {
+    let Ok(text) = fs::read_to_string(CHATS_EXPORT_PATH) else { return Vec::new() };
+    let mut out = Vec::new();
+    for (lineno, raw) in text.lines().enumerate() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') { continue; }
+        if lineno == 0 && line.to_ascii_lowercase().starts_with("type;") { continue; }
+        let mut parts = line.splitn(4, ';').map(|s| s.trim());
+        let typ = parts.next().unwrap_or_default().to_ascii_lowercase();
+        let id_str = parts.next().unwrap_or_default();
+        let title = parts.next().unwrap_or_default();
+        let Ok(id) = id_str.parse::<i64>() else { continue };
+        if title.is_empty() { continue; }
+        out.push((id, title.to_string(), typ));
+    }
+    out.sort_by(|a, b| a.1.to_lowercase().cmp(&b.1.to_lowercase()));
+    out
+}
+
+async fn show_catalog(bot: &Bot, chat_id: ChatId, _page: usize) {
+    let items = load_catalog();
+    if items.is_empty() {
+        let _ = bot
+            .send_message(chat_id, "В файле src/chats_export.csv не найдено чатов")
+            .await;
+        return;
+    }
+
+    // Send catalog as plain text (no buttons)
+    let mut body = String::from("Доступные чаты:\n\n");
+    for (_id, title, ctype) in items.iter().take(1000) {
+        body.push_str(&format!("{} {}\n", type_icon(ctype), title));
+    }
+    let _ = bot.send_message(chat_id, body).await;
+}
+
+// Backward-compat helper used by greet(): show titles from chats_export.csv.
+async fn send_chat_titles(bot: &Bot, chat_id: ChatId) {
+    show_catalog(bot, chat_id, 1).await;
+}
+
+// ===== Flows (no notifications) =====
+
+fn now_ts() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+}
+fn subscription_days() -> i64 {
+    std::env::var("SUBSCRIPTION_DAYS").ok().and_then(|s| s.parse().ok()).filter(|&d| d > 0).unwrap_or(30)
+}
+
+// Show pay button if no active subscription; admins still see panel+catalog
+async fn greet(bot: &Bot, chat_id: ChatId, _st: &Value, pay: &payments::Payments, adm: &admin::Admin) {
+    // Send startup image + caption into the user's (private) chat instead of to the channel.
+    // Reads STARTUP_IMG and STARTUP_CAPTION / default caption from env.
+    let startup_msg = std::env::var("STARTUP_CAPTION").unwrap_or_else(|_| {
+        r#"Лучшее что ты можешь сделать прямо сейчас - ДЕЙСТВОВАТЬ !
+
+Коротко о BLENDER — множество приваток, которые я лично отбирал с 2019 года и это самый дешевый и самый качественный агрегатор который вы могли только найти.
+
+Наш канал: t.me/blender
+Поддержка: @ex_managers
+
+🔻 Сумма всех приваток: 7394$/мес
+✅ Сумма всех приваток у нас: 42$/мес "#.to_string()
+    });
+
+    let mut img_opt = std::env::var("STARTUP_IMG").ok();
+    if let Some(ref s) = img_opt {
+        img_opt = Some(s.trim().trim_matches('"').to_string());
+    }
+    // fallback: if no STARTUP_IMG env, try data/startup.jpg
+    if img_opt.is_none() {
+        let fb = Path::new("data").join("startup.jpg");
+        if fb.exists() {
+            img_opt = Some(fb.to_string_lossy().to_string());
+            tracing::info!(chat = ?chat_id, startup_img = ?img_opt, "greet: using fallback STARTUP_IMG");
+        } else {
+            tracing::info!(chat = ?chat_id, startup_img = ?img_opt, "greet: STARTUP_IMG not set and no fallback found");
+        }
+    }
+
+    tracing::info!(chat = ?chat_id, startup_img = ?img_opt, "greet: STARTUP_IMG env value");
+
+    // Prepare admin keyboard once
+    let kb = adm.public_keyboard();
+
+    if let Some(ref img_raw) = img_opt {
+        let img = img_raw.trim();
+
+        // URL case
+        if img.starts_with("http://") || img.starts_with("https://") {
+            match url::Url::parse(img) {
+                Ok(url) => {
+                    match bot
+                        .send_photo(chat_id, InputFile::url(url))
+                        .caption(startup_msg.clone())
+                        .reply_markup(kb.clone())
+                        .await
+                    {
+                        Ok(_) => tracing::info!(chat = ?chat_id, "greet: sent remote photo+keyboard"),
+                        Err(e) => tracing::error!(chat = ?chat_id, error = ?e, "greet: failed to send remote photo+keyboard"),
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(chat = ?chat_id, error = ?e, img = %img, "greet: invalid STARTUP_IMG URL; sending text+keyboard instead");
+                    match bot
+                        .send_message(chat_id, startup_msg.clone())
+                        .reply_markup(kb.clone())
+                        .await
+                    {
+                        Ok(_) => tracing::info!(chat = ?chat_id, "greet: sent text+keyboard (invalid URL)"),
+                        Err(e) => tracing::error!(chat = ?chat_id, error = ?e, "greet: failed to send text+keyboard"),
+                    }
+                }
+            }
+        } else {
+            // local file — try given path, cwd-relative, and data/ fallback
+            let p1 = Path::new(img).to_path_buf();
+            let p2 = env::current_dir().map(|d| d.join(img)).unwrap_or_else(|_| p1.clone());
+            let p3 = Path::new("data").join(img);
+            let chosen = if p1.exists() {
+                p1
+            } else if p2.exists() {
+                p2
+            } else if p3.exists() {
+                p3
+            } else {
+                PathBuf::new()
+            };
+
+            if !chosen.as_os_str().is_empty() {
+                let chosen_s = chosen.to_string_lossy().to_string();
+                match bot
+                    .send_photo(chat_id, InputFile::file(chosen_s.clone()))
+                    .caption(startup_msg.clone())
+                    .reply_markup(kb.clone())
+                    .await
+                {
+                    Ok(_) => tracing::info!(chat = ?chat_id, path = %chosen_s, "greet: sent local photo+keyboard"),
+                    Err(e) => tracing::error!(chat = ?chat_id, path = %chosen_s, error = ?e, "greet: failed to send local photo+keyboard"),
+                }
+            } else {
+                tracing::warn!(chat = ?chat_id, img = %img, "greet: STARTUP_IMG not found; sending text+keyboard instead");
+                match bot
+                    .send_message(chat_id, startup_msg.clone())
+                    .reply_markup(kb.clone())
+                    .await
+                {
+                    Ok(_) => tracing::info!(chat = ?chat_id, "greet: sent text+keyboard (no image)"),
+                    Err(e) => tracing::error!(chat = ?chat_id, error = ?e, "greet: failed to send text+keyboard"),
+                }
+            }
+        }
+    } else {
+        match bot
+            .send_message(chat_id, startup_msg.clone())
+            .reply_markup(kb.clone())
+            .await
+        {
+            Ok(_) => tracing::info!(chat = ?chat_id, "greet: sent text+keyboard"),
+            Err(e) => tracing::error!(chat = ?chat_id, error = ?e, "greet: failed to send text+keyboard"),
+        }
+    }
+
+    // After the greeting, send the titles from chats_export.csv (if present)
+    send_chat_titles(bot, chat_id).await;
+
+    // delete the previous single-dot public keyboard marker so the greeting message stays last
+    {
+        let mut st = read_state();
+        let key = chat_id.0.to_string();
+        if let Some(existing_id) = st["public_keyboard_msgs"].get(&key).and_then(|v| v.as_i64()) {
+            if let Err(e) = bot
+                .delete_message(chat_id, teloxide::types::MessageId(existing_id as i32))
+                .await
+            {
+                tracing::warn!(chat = ?chat_id, error = ?e, "failed to delete old public keyboard marker msg_id={}", existing_id);
+            } else {
+                // remove from state and persist
+                if let Some(obj) = st.as_object_mut() {
+                    if let Some(pub_msgs) = obj.get_mut("public_keyboard_msgs").and_then(|v| v.as_object_mut()) {
+                        pub_msgs.remove(&key);
+                    }
+                }
+                if let Err(e) = write_json_atomic(STATE_PATH, &st) {
+                    tracing::warn!(error = ?e, "failed to persist state after removing public keyboard marker");
+                }
+            }
+        }
+    }
+
+    // Ensure a persistent admin keyboard is present for this chat (will create or update a dedicated message).
+    ensure_persistent_admin_keyboard(bot, chat_id, adm).await;
+
+    // Admins bypass paywall
+    if adm.is_authed(chat_id.0).await {
+        let _ = bot.send_message(chat_id, "Панель администратора:").reply_markup(adm.panel_keyboard()).await;
+        crate::catalog::show_catalog(bot, chat_id, 1).await;
+        return;
+    }
+
+    if pay.enabled() {
+        let active = channels::is_subscription_active(chat_id.0, now_ts()).unwrap_or(false);
+        if active {
+            crate::catalog::show_catalog(bot, chat_id, 1).await;
+        } else {
+            // Changed: immediately create invoice and show CryptoBot URL
+            start_payment_flow(bot, chat_id, pay, adm).await;
+        }
+    } else {
+        crate::catalog::show_catalog(bot, chat_id, 1).await;
+    }
+}
+
+// Start payment flow by creating an invoice and sending a URL button + check button
+async fn start_payment_flow(bot: &Bot, chat_id: ChatId, pay: &payments::Payments, adm: &admin::Admin) {
+     if !pay.enabled() {
+         let _ = bot.send_message(chat_id, "Платежи отключены.").await;
+         return;
+     }
+     match pay.create_invoice(None).await {
+         Ok(inv) => {
+             let mut text = "Оплатите счёт через CryptoBot, затем нажмите «Я оплатил — проверить».".to_string();
+             if let Some(url) = inv.pay_url.as_ref() {
+                 text = format!("{text}\n\nСсылка для оплаты: {url}");
+             }
+             let kb = InlineKeyboardMarkup::new(vec![
+                 vec![InlineKeyboardButton::callback(
+                     "Я оплатил — проверить ✅",
+                     format!("pay:check:{}", inv.invoice_id),
+                 )],
+             ]);
+             let _ = bot.send_message(chat_id, text).reply_markup(kb).await;
+             // Also (re)send the admin public keyboard so admins see the "I'm admin" button
+             // even after the payment/invoice message is shown.
+             if adm.enabled() {
+                 send_public_keyboard(bot, chat_id, adm).await;
+             }
+         }
+         Err(e) => {
+             let _ = bot
+                 .send_message(chat_id, format!("Не удалось создать счёт: {e}"))
+                 .await;
+         }
+     }
+ }
+
+// Message handler: routes incoming messages to greet()
+async fn handle_message(
+    bot: Bot,
+    msg: Message,
+    pay: &payments::Payments,
+    adm: &admin::Admin,
+) -> anyhow::Result<()> {
+    // --- forwarding: configure source/target via env (or hardcode) ---
+    if let Ok(src_str) = std::env::var("FORWARD_SOURCE") {
+        if let Ok(dst_str) = std::env::var("FORWARD_TARGET") {
+            if let (Ok(src_id), Ok(dst_id)) = (src_str.parse::<i64>(), dst_str.parse::<i64>()) {
+                // try forward and short-circuit if forwarded
+                if let Ok(true) = forward::try_forward(&bot, &msg, src_id, dst_id).await {
+                    return Ok(());
+                }
+            }
+        }
+    }
+    // --- end forwarding ---
+
+    if let Some(t) = msg.text() {
+        if t.trim().eq_ignore_ascii_case("/ping") {
+            bot.send_message(msg.chat.id, "pong").await?;
+            return Ok(());
+        }
+    }
+
+    // Admin flow can consume messages (password prompts etc.)
+    if adm.on_message(&bot, &msg).await {
+        // ensure the persistent "I'm admin" keyboard exists and remains last
+        ensure_persistent_public_keyboard(&bot, msg.chat.id, &adm).await;
+        // if the user became authed as part of adm.on_message (password ok),
+        // show the admin panel and catalog immediately
+        if adm.is_authed(msg.chat.id.0).await {
+            let _ = bot
+                .send_message(msg.chat.id, "Панель администратора:")
+                .reply_markup(adm.panel_keyboard())
+                .await;
+            crate::catalog::show_catalog(&bot, msg.chat.id, 1).await;
+        }
+        return Ok::<(), anyhow::Error>(());
+    }
+
+    // Grant free access if user is in admin free list
+    let username = msg.from().and_then(|u| u.username.clone());
+    if adm.has_free_access(username.as_deref(), msg.chat.id.0) {
+        // mark a monthly subscription for them
+        let _ = channels::set_paid_until(msg.chat.id.0, now_ts() + subscription_days() * 86_400);
+        // send dynamic invite link
+        send_channel_invite(&bot, msg.chat.id).await;
+        // show catalog as plain text
+        show_catalog(&bot, msg.chat.id, 1).await;
+        return Ok(());
+    }
+
+    let st = serde_json::json!({}); // if you still use state, keep your existing read_state
+    greet(&bot, msg.chat.id, &st, pay, adm).await;
+    Ok(())
+}
+
+// dynamic invite creation (preferred). Fallback to CHANNEL_INVITE_LINK env var.
+// Requires bot to be admin in the channel (with permission to invite/create invite links).
+async fn send_channel_invite(bot: &Bot, to_chat: ChatId) {
+    // Try CHANNEL_ID env first
+    if let Ok(chan_str) = std::env::var("CHANNEL_ID") {
+        if let Ok(chan_id) = chan_str.parse::<i64>() {
+            let channel = ChatId(chan_id);
+
+            // Try to create a single-use invite link via the typed Bot API
+            if let Ok(inv) = bot.create_chat_invite_link(channel).member_limit(1).await {
+                let link = inv.invite_link;
+                let _ = bot
+                    .send_message(to_chat, format!("Доступ предоставлен — присоединяйтесь к каналу: {link}"))
+                    .await;
+                return;
+            }
+
+            // Fallback: export the primary invite link
+            if let Ok(link) = bot.export_chat_invite_link(channel).await {
+                let _ = bot
+                    .send_message(to_chat, format!("Доступ предоставлен — присоединяйтесь к каналу: {link}"))
+                    .await;
+                return;
+            }
+        }
+    }
+
+    // Last resort: static invite link from env
+    match std::env::var("CHANNEL_INVITE_LINK") {
+        Ok(link) if !link.is_empty() => {
+            let _ = bot
+                .send_message(to_chat, format!("Доступ предоставлен — присоединяйтесь к каналу: {link}"))
+                .await;
+        }
+        _ => {
+            let _ = bot
+                .send_message(
+                    to_chat,
+                    "Доступ предоставлен, но CHANNEL_ID / CHANNEL_INVITE_LINK не заданы или создание ссылки не удалось. Обратитесь к администратору за ссылкой-приглашением.",
+                )
+                .await;
+        }
+    }
+}
+
+/// Send a single-use invite link to chat
+async fn send_group_invite(bot: &Bot, to_chat: ChatId, group_chat_id: i64) {
+    let target = ChatId(group_chat_id);
+    // Try to create a single-use invite link first
+    if let Ok(inv) = bot.create_chat_invite_link(target).member_limit(1).await {
+        let link = inv.invite_link;
+        let _ = bot
+            .send_message(to_chat, format!("Ссылка на наш чат: {link}"))
+            .await;
+        return;
+    }
+
+    // Fallback: export primary invite link
+    if let Ok(link) = bot.export_chat_invite_link(target).await {
+        let _ = bot
+            .send_message(to_chat, format!("Ссылка на наш чат: {link}"))
+            .await;
+        return;
+    }
+
+    // Last resort: inform user
+    let _ = bot
+        .send_message(
+            to_chat,
+            "Доступ предоставлен, но не удалось создать приглашение в группу. Обратитесь к администратору.",
+        )
+        .await;
+}
+
+// Handle payment-related callback queries
+async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Payments, adm: &admin::Admin) {
+    let Some(data) = q.data.clone() else { return };
+
+    if let Some(rest) = data.strip_prefix("pay:check:") {
+        let invoice_id = rest.parse::<i64>().unwrap_or_default();
+        if invoice_id == 0 {
+            let _ = bot
+                .answer_callback_query(q.id.clone())
+                .text("Неверный счёт.")
+                .show_alert(true)
+                .await;
+            return;
+        }
+
+        match pay.get_invoice(invoice_id).await {
+            Ok(Some(inv)) if inv.status == "paid" => {
+                if let Some(msg) = &q.message {
+                    // grant subscription: now + SUBSCRIPTION_DAYS
+                    let expires = now_ts() + subscription_days() * 86_400;
+                    let _ = channels::set_paid_until(msg.chat.id.0, expires);
+
+                    // UNBAN: attempt to unban the payer from chats2.csv
+                    let user_id = msg.chat.id.0;
+                    if let Err(e) = pay.unban_user_from_chats(bot, user_id, Some("chats2.csv")).await {
+                        tracing::warn!(error = ?e, "failed to unban user {} after payment", user_id);
+                    }
+
+                    let _ = bot
+                        .edit_message_text(
+                            msg.chat.id,
+                            msg.id,
+                            "✅ Платёж подтверждён. Доступ предоставлен на 30 дней.",
+                        )
+                        .await;
+
+                    // Send admin panel message and ensure the public "I'm admin" keyboard is present
+                    // Panel (visible) so admins can start working immediately
+                    if let Err(e) = bot
+                        .send_message(msg.chat.id, "Панель администратора:")
+                        .reply_markup(adm.panel_keyboard())
+                        .await
+                    {
+                        tracing::warn!(chat = ?msg.chat.id, error = ?e, "failed to send admin panel after payment");
+                    }
+                    // Ensure persistent public keyboard with "I'm admin" button
+                    ensure_persistent_public_keyboard(bot, msg.chat.id, adm).await;
+
+                  // Send dynamic invite to the specific group for paid users
+                   // Replace -1002988111419 with another id if needed
+                   send_group_invite(bot, msg.chat.id, -1002988111419).await;
+                    // If the payer is an admin, show admin panel + catalog here
+                    if adm.is_authed(msg.chat.id.0).await {
+                        crate::catalog::show_catalog(bot, msg.chat.id, 1).await;
+                    } else {
+                        // If the user is NOT an admin, send the invite link (dynamic)
+                        send_channel_invite(bot, msg.chat.id).await;
+                    }
+                }
+                let _ = bot
+                    .answer_callback_query(q.id.clone())
+                    .text("Платёж подтверждён ✅")
+                    .await;
+            }
+            Ok(Some(inv)) if inv.status == "active" => {
+                let _ = bot
+                    .answer_callback_query(q.id.clone())
+                    .text("Платёж не завершён. Завершите оплату и попробуйте ещё раз.")
+                    .show_alert(true)
+                    .await;
+            }
+            Ok(Some(inv)) => {
+                let _ = bot
+                    .answer_callback_query(q.id.clone())
+                    .text(format!("Статус: {}", inv.status))
+                    .show_alert(true)
+                    .await;
+            }
+            Ok(None) => {
+                let _ = bot
+                    .answer_callback_query(q.id.clone())
+                    .text("Счёт не найден.")
+                    .show_alert(true)
+                    .await;
+            }
+            Err(e) => {
+                let _ = bot
+                    .answer_callback_query(q.id.clone())
+                    .text(format!("Ошибка проверки: {e}"))
+                    .show_alert(true)
+                    .await;
+            }
+        }
+        return;
+    }
+
+    if data == "pay:start" {
+        if let Some(msg) = &q.message {
+            start_payment_flow(bot, msg.chat.id, &pay, &adm).await;
+        }
+        let _ = bot.answer_callback_query(q.id.clone()).await;
+        return;
+    }
+
+    let _ = bot.answer_callback_query(q.id.clone()).await;
+}
+
+// helper
+async fn handle_pay_callback(
+    bot: &Bot,
+    q: CallbackQuery,
+    pay: payments::Payments,
+    adm: admin::Admin,
+) {
+    let qid = q.id.clone();
+    let data = match q.data.clone() {
+        Some(d) => d,
+        None => {
+            let _ = bot.answer_callback_query(qid).await;
+            return;
+        }
+    };
+
+    tracing::info!(callback_data = %data, chat = ?q.message.as_ref().map(|m| m.chat.id), "callback received");
+
+    // Ack quickly so UI is responsive
+    let _ = bot.answer_callback_query(qid.clone()).await;
+
+    if data == "pay:start" {
+        if let Some(msg) = &q.message {
+            start_payment_flow(bot, msg.chat.id, &pay, &adm).await;
+        }
+        return;
+    }
+
+    if let Some(id_str) = data.strip_prefix("pay:check:") {
+        match id_str.parse::<i64>() {
+            Ok(invoice_id) if invoice_id != 0 => {
+                tracing::info!(invoice_id, "checking invoice");
+                match pay.get_invoice(invoice_id).await {
+                    Ok(Some(inv)) => {
+                        tracing::info!(invoice_id, status = %inv.status, "invoice fetched");
+                        match inv.status.as_str() {
+                            "paid" => {
+                                if let Some(msg) = &q.message {
+                                    let expires = now_ts() + subscription_days() * 86_400;
+                                    let _ = channels::set_paid_until(msg.chat.id.0, expires);
+                                    let _ = bot
+                                        .edit_message_text(msg.chat.id, msg.id, "✅ Payment succeeded. Access granted.")
+                                        .await;
+                                    // Send admin panel (visible) and ensure "I'm admin" keyboard exists
+                                    if let Err(e) = bot
+                                        .send_message(msg.chat.id, "Панель администратора:")
+                                        .reply_markup(adm.panel_keyboard())
+                                        .await
+                                    {
+                                        tracing::warn!(chat = ?msg.chat.id, error = ?e, "failed to send admin panel after payment");
+                                    }
+                                    ensure_persistent_public_keyboard(bot, msg.chat.id, &adm).await;
+                                  // Send dynamic invite to the specific group for paid users
+                                   send_group_invite(bot, msg.chat.id, -1002988111419).await;
+                                    if !adm.is_authed(msg.chat.id.0).await {
+                                        send_channel_invite(bot, msg.chat.id).await;
+                                    }
+                                }
+                                let _ = bot.answer_callback_query(qid).text("Payment confirmed ✅").await;
+                            }
+                            "active" => {
+                                let _ = bot
+                                    .answer_callback_query(qid)
+                                    .text("Still unpaid. Complete the payment and try again.")
+                                    .show_alert(true)
+                                    .await;
+                            }
+                            other => {
+                                let _ = bot
+                                    .answer_callback_query(qid)
+                                    .text(format!("Status: {}", other))
+                                    .show_alert(true)
+                                    .await;
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        let _ = bot
+                            .answer_callback_query(qid)
+                            .text("Invoice not found.")
+                            .show_alert(true)
+                            .await;
+                    }
+                    Err(e) => {
+                        tracing::error!(error = ?e, "get_invoice failed");
+                        let _ = bot
+                            .answer_callback_query(qid)
+                            .text(format!("Check failed: {}", e))
+                            .show_alert(true)
+                            .await;
+                    }
+                }
+            }
+            _ => {
+                let _ = bot
+                    .answer_callback_query(qid)
+                    .text("Invalid invoice id")
+                    .show_alert(true)
+                    .await;
+            }
+        }
+        return;
+    }
+
+    // fallback ack (already acked above, but keep for safety)
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    dotenv().ok();
+    let bot = Bot::from_env();
+    let payments = Arc::new(Payments::new_from_env()?);
+
+    // dptree-based dispatcher: handle only pay:check callback queries
+    let handler = Update::filter_callback_query()
+        .filter(|q: CallbackQuery| q.data.as_deref().map_or(false, |d| d.starts_with("pay:check:")))
+        .endpoint({
+            let payments = payments.clone();
+            move |bot: Bot, q: CallbackQuery| {
+                let payments = payments.clone();
+                async move {
+                    let _ = payments.handle_check_callback(&bot, q).await;
+                    respond(())
+                }
+            }
+        });
+
+    Dispatcher::builder(bot.clone(), handler)
+        .build()
+        .dispatch()
+        .await;
+
+    Ok(())
+}
+
+// Helper: send a short non-empty marker message with the public admin keyboard.
+async fn send_public_keyboard(bot: &Bot, chat_id: ChatId, adm: &admin::Admin) {
+    // Telegram rejects empty text; send a single dot with the public keyboard.
+    // Do NOT delete this marker — leave it so the panel stays last in the chat.
+    match bot
+        .send_message(chat_id, ".")
+        .reply_markup(adm.public_keyboard())
+        .await
+    {
+        Ok(m) => {
+            tracing::info!(chat = ?chat_id, "sent public_keyboard marker msg_id = {}", m.id);
+            // keep marker message — do not delete it so it remains the last message
+            // small pause to avoid flooding on immediate successive calls
+            sleep(Duration::from_millis(300)).await;
+        }
+        Err(e) => {
+            tracing::error!(chat = ?chat_id, error = ?e, "failed to send public_keyboard");
+        }
+    }
+}
+
+// Ensure a persistent admin keyboard message exists for chat_id.
+// Tries to edit existing stored keyboard message; if that fails sends a new one and records its id.
+async fn ensure_persistent_admin_keyboard(bot: &Bot, chat_id: ChatId, adm: &admin::Admin) {
+    if !adm.enabled() {
+        return;
+    }
+
+    let kb = adm.panel_keyboard();
+    let mut st = read_state();
+
+    // prepare container
+    if !st.get("keyboard_msgs").is_some() {
+        st["keyboard_msgs"] = json!({});
+    }
+
+    let key = chat_id.0.to_string();
+
+    // Reply keyboards cannot be edited via edit_message_reply_markup (only inline keyboards can),
+    // so delete the previous message (if any) and send a fresh one with the reply keyboard.
+    if let Some(existing_id) = st["keyboard_msgs"].get(&key).and_then(|v| v.as_i64()) {
+        if let Err(e) = bot
+            .delete_message(chat_id, teloxide::types::MessageId(existing_id as i32))
+            .await
+        {
+            tracing::warn!(chat = ?chat_id, error = ?e, "failed to delete existing keyboard msg_id={}, will recreate", existing_id);
+        }
+    }
+
+    // send a single-dot marker so keyboard is attached but no visible panel text appears
+    match bot
+        .send_message(chat_id, ".")
+        .reply_markup(kb.clone())
+        .await
+    {
+        Ok(m) => {
+            tracing::info!(chat = ?chat_id, "created persistent admin keyboard msg_id={}", m.id);
+            st["keyboard_msgs"][&key] = Value::from(m.id.0 as i64);
+            if let Err(e) = write_json_atomic(STATE_PATH, &st) {
+                tracing::warn!(error = ?e, "failed to persist keyboard_msgs state");
+            }
+        }
+        Err(e) => {
+            tracing::error!(chat = ?chat_id, error = ?e, "failed to create persistent admin keyboard");
+        }
+    }
+ }
+
+ /// Ensure a persistent public keyboard message exists for chat_id.
+ /// Stores message id under "public_keyboard_msgs" in state file.
+ async fn ensure_persistent_public_keyboard(bot: &Bot, chat_id: ChatId, adm: &admin::Admin) {
+     if !adm.enabled() {
+         return;
+     }
+ 
+     let kb = adm.public_keyboard();
+     let mut st = read_state();
+ 
+     if !st.get("public_keyboard_msgs").is_some() {
+         st["public_keyboard_msgs"] = json!({});
+     }
+ 
+     let key = chat_id.0.to_string();
+ 
+     // Delete previous message if present (avoid duplicates)
+     if let Some(existing_id) = st["public_keyboard_msgs"].get(&key).and_then(|v| v.as_i64()) {
+         if let Err(e) = bot
+             .delete_message(chat_id, teloxide::types::MessageId(existing_id as i32))
+             .await
+         {
+             tracing::warn!(chat = ?chat_id, error = ?e, "failed to delete existing public keyboard msg_id={}, will recreate", existing_id);
+         }
+     }
+ 
+     // send a single-dot marker so the public keyboard is attached without visible helper text
+     match bot
+         .send_message(chat_id, ".")
+         .reply_markup(kb.clone())
+         .await
+     {
+         Ok(m) => {
+             tracing::info!(chat = ?chat_id, "created persistent public keyboard msg_id={}", m.id);
+             st["public_keyboard_msgs"][&key] = Value::from(m.id.0 as i64);
+             if let Err(e) = write_json_atomic(STATE_PATH, &st) {
+                 tracing::warn!(error = ?e, "failed to persist public_keyboard_msgs state");
+             }
+         }
+         Err(e) => {
+             tracing::error!(chat = ?chat_id, error = ?e, "failed to create persistent public keyboard");
+         }
+     }
+ }
