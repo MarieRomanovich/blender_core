@@ -547,6 +547,8 @@ async fn handle_message(
         // quick /start reply for testing bot responsiveness
         if t.trim().starts_with("/start") {
             let username = msg.from().and_then(|u| u.username.clone());
+            // ADD: debug logging
+            println!("DEBUG /start: username={:?}, has_free_access={}", username, adm.has_free_access(username.as_deref(), msg.chat.id.0));
             if adm.has_free_access(username.as_deref(), msg.chat.id.0) {
                 // grant free access: mark subscription, write to subs.json, send folders message
                 let expires = now_ts() + subscription_days() * 86_400;
@@ -674,7 +676,7 @@ async fn handle_message(
         let mut st = read_state();
         if is_admin_pending(&st, user_id, "add_free") {
             set_admin_pending(&mut st, user_id, None);
-            let username = t.trim().trim_start_matches('@').to_string();  // FIXED: strip @ to match check
+            let username = t.trim().trim_start_matches('@').to_lowercase();  // CHANGED: add .to_lowercase() for case-insensitivity
             let mut free_users = load_free_users();
             if free_users.insert(username.clone()) {
                 if let Err(e) = save_free_users(&free_users) {
@@ -693,7 +695,7 @@ async fn handle_message(
         }
         if is_admin_pending(&st, user_id, "remove_free") {
             set_admin_pending(&mut st, user_id, None);
-            let username = t.trim().trim_start_matches('@').to_string();  // FIXED: strip @ to match check
+            let username = t.trim().trim_start_matches('@').to_lowercase();  // CHANGED: add .to_lowercase() for case-insensitivity
             let mut free_users = load_free_users();
             if free_users.remove(&username) {
                 if let Err(e) = save_free_users(&free_users) {
@@ -763,7 +765,7 @@ fn load_first_month_usernames() -> HashSet<String> {
 }
 
 // Load free users from src/free.json as a set of usernames
-fn load_free_users() -> HashSet<String> {
+pub fn load_free_users() -> HashSet<String> {
     let path = "src/free.json";  // CHANGED: from "data/free_users.json" to "src/free.json" for consistency with first_month.json
     match fs::read_to_string(path) {
         Ok(s) => {
@@ -1213,15 +1215,6 @@ async fn main() -> anyhow::Result<()> {
             }
         });
  
-    // simple /start message handler for testing responsiveness
-    let start_msg_handler = Update::filter_message()
-        .filter(|m: teloxide::types::Message| m.text().map_or(false, |t| t.trim_start().starts_with("/start")))
-        .endpoint(|bot: Bot, msg: teloxide::types::Message| async move {
-            // send the startup message+picture and keyboard to the user
-            send_startup_to_user(&bot, msg.chat.id).await;
-            respond(())
-        });
- 
     // full message handler: route all messages to your existing handle_message function
     let full_msg_handler = Update::filter_message().endpoint({
         let payments = payments.clone();
@@ -1387,7 +1380,6 @@ async fn main() -> anyhow::Result<()> {
     // ensure admin_cb_handler is branched into your dispatcher
     let handler = dptree::entry()
         .branch(cb_handler)
-        .branch(start_msg_handler)
         .branch(full_msg_handler)
         .branch(debug_msg_logger)
         .branch(show_channels_cb)

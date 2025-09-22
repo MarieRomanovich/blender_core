@@ -13,10 +13,10 @@ use teloxide::{
 };
 use tokio::sync::RwLock;
 
-use crate::catalog;
+use crate::{catalog, load_free_users, save_free_users};
 
 const STATE_PATH: &str = "data/state.json";
-const FREE_USERS_PATH: &str = "data/free_users.json";
+const FREE_USERS_PATH: &str = "src/free.json"; // CHANGED: from "data/free_users.json" to "src/free.json"
 
 const BTN_IM_ADMIN: &str = "Я админ";
 const BTN_ADD: &str = "Добавить пользователя";
@@ -52,21 +52,29 @@ fn read_state() -> Value {
 fn read_free_users() -> HashSet<String> {
     match fs::read_to_string(FREE_USERS_PATH) {
         Ok(s) => serde_json::from_str::<Vec<String>>(&s)
-            .map(|v| v.into_iter().map(|u| u.to_lowercase()).collect())
+            .map(|v| v.into_iter().collect())  // REMOVED: .map(|u| u.to_lowercase())
             .unwrap_or_default(),
         Err(_) => HashSet::new(),
     }
 }
 
-fn save_free_users(set: &HashSet<String>) {
-    let mut v: Vec<String> = set.iter().cloned().collect();
-    v.sort();
-    write_json_atomic(FREE_USERS_PATH, &json!(v));
+fn read_free_list() -> Vec<String> {
+    let path = std::path::Path::new("src/free.json");
+    if let Ok(txt) = fs::read_to_string(path) {
+        serde_json::from_str::<Vec<String>>(&txt)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|s| s.trim().trim_start_matches('@').to_lowercase())  // CHANGED: add .to_lowercase() for consistency
+            .filter(|s| !s.is_empty())
+            .collect()
+    } else {
+        Vec::new()
+    }
 }
 
 fn normalize_username(input: &str) -> Option<String> {
-    let t = input.trim().trim_start_matches('@').to_lowercase();
-    if t.is_empty() { None } else { Some(t) }
+    let t = input.trim().trim_start_matches('@');  // REMOVED: .to_lowercase()
+    if t.is_empty() { None } else { Some(t.to_string()) }
 }
 
 #[derive(Clone)]
@@ -114,18 +122,11 @@ impl Admin {
         ])
     }
 
-    // Returns true if username (without @, case-insensitive) or chat_id is in data/free_users.json
-    pub fn has_free_access(&self, username: Option<&str>, chat_id: i64) -> bool {
-        let list = read_free_list();
-        let u = username
-            .unwrap_or_default()
-            .trim()
-            .trim_start_matches('@')
-            .to_lowercase();
-        if !u.is_empty() && list.iter().any(|s| s == &u) {
-            return true;
-        }
-        list.iter().any(|s| s == &chat_id.to_string())
+    /// Check if a user (by username) has free access based on src/free.json.
+    pub fn has_free_access(&self, username: Option<&str>, _chat_id: i64) -> bool {
+        let Some(user) = username else { return false };
+        let free_users = load_free_users();  // Assumes this loads from "src/free.json"
+        free_users.contains(&user.trim_start_matches('@').to_lowercase())  // CHANGED: add .to_lowercase() for case-insensitivity
     }
 
     // Check if a chat is admin-authed
@@ -342,17 +343,3 @@ impl Admin {
     }
 }
 
-// Store free users as JSON array of strings: ["user1","user2","123456789"]
-fn read_free_list() -> Vec<String> {
-    let path = std::path::Path::new("data/free_users.json");
-    if let Ok(txt) = fs::read_to_string(path) {
-        serde_json::from_str::<Vec<String>>(&txt)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|s| s.trim().trim_start_matches('@').to_lowercase())
-            .filter(|s| !s.is_empty())
-            .collect()
-    } else {
-        Vec::new()
-    }
-}
