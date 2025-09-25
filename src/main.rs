@@ -561,6 +561,8 @@ async fn handle_message(
                 if let Err(e) = pay.append_subscription_record(user_id, 1) {
                     eprintln!("free access: append_subscription_record failed: {:?}", e);
                 }
+                // NEW: send congratulatory message
+                let _ = bot.send_message(msg.chat.id, "Поздравляем, вам предоставлен бесплатный доступ!").await;
                 // send folders message
                 let aktiv_url = reqwest::Url::parse("https://t.me/addlist/Q3mkHDAfwjYyYjU0").ok();
                 let ludiki_url = reqwest::Url::parse("https://t.me/addlist/TyvbTgRFp5QwY2Y0").ok();
@@ -729,7 +731,7 @@ async fn handle_message(
         // mark a monthly subscription for them
         let _ = channels::set_paid_until(msg.chat.id.0, now_ts() + subscription_days() * 86_400);
         // send dynamic invite link
-        send_channel_invite(&bot, msg.chat.id).await;
+        //send_channel_invite(&bot, msg.chat.id).await;
         // show catalog as plain text
         show_catalog(&bot, msg.chat.id, 1).await;
         return Ok(());
@@ -852,7 +854,6 @@ fn set_promo_pending(st: &mut Value, user_id: i64, pending: bool) {
     }
 }
 
-
 // dynamic invite creation (preferred). Fallback to CHANNEL_INVITE_LINK env var.
 // Requires bot to be admin in the channel (with permission to invite/create invite links).
 async fn send_channel_invite(bot: &Bot, to_chat: ChatId) {
@@ -879,8 +880,7 @@ async fn send_channel_invite(bot: &Bot, to_chat: ChatId) {
             }
         }
     }
-
-    // Last resort: static invite link from env
+// Last resort: static invite link from env
     match std::env::var("CHANNEL_INVITE_LINK") {
         Ok(link) if !link.is_empty() => {
             let _ = bot
@@ -891,41 +891,18 @@ async fn send_channel_invite(bot: &Bot, to_chat: ChatId) {
             let _ = bot
                 .send_message(
                     to_chat,
-                    "Доступ предоставлен, но CHANNEL_ID / CHANNEL_INVITE_LINK не заданы или создание ссылки не удалось. Обратитесь к администратору за ссылкой-приглашением.",
+                    "",
                 )
                 .await;
         }
     }
 }
 
-/// Send a single-use invite link to chat
-async fn send_group_invite(bot: &Bot, to_chat: ChatId, group_chat_id: i64) {
-    let target = ChatId(group_chat_id);
-    // Try to create a single-use invite link first
-    if let Ok(inv) = bot.create_chat_invite_link(target).member_limit(1).await {
-        let link = inv.invite_link;
-        let _ = bot
-            .send_message(to_chat, format!("Ссылка на наш чат: {link}"))
-            .await;
-        return;
-    }
 
-    // Fallback: export primary invite link
-    if let Ok(link) = bot.export_chat_invite_link(target).await {
-        let _ = bot
-            .send_message(to_chat, format!("Ссылка на наш чат: {link}"))
-            .await;
-        return;
-    }
 
-    // Last resort: inform user
-    let _ = bot
-        .send_message(
-            to_chat,
-            "Доступ предоставлен, но не удалось создать приглашение в группу. Обратитесь к администратору.",
-        )
-        .await;
-}
+
+
+    
 
 // Handle payment-related callback queries
 async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Payments, adm: &admin::Admin) {
@@ -1011,13 +988,13 @@ async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Paym
 
                   // Send dynamic invite to the specific group for paid users
                    // Replace -1002988111419 with another id if needed
-                   send_group_invite(bot, msg.chat.id, -1002988111419).await;
+                   
                     // If the payer is an admin, show admin panel + catalog here
                     if adm.is_authed(msg.chat.id.0).await {
                         crate::catalog::show_catalog(bot, msg.chat.id, 1).await;
                     } else {
                         // If the user is NOT an admin, send the invite link (dynamic)
-                        send_channel_invite(bot, msg.chat.id).await;
+                        //send_channel_invite(bot, msg.chat.id).await;
                     }
                 }
                 let _ = bot
@@ -1121,7 +1098,7 @@ async fn handle_pay_callback(
                                     }
                                     ensure_persistent_public_keyboard(bot, msg.chat.id, &adm).await;
                                   // Send dynamic invite to the specific group for paid users
-                                   send_group_invite(bot, msg.chat.id, -1002988111419).await;
+                                  
                                     if !adm.is_authed(msg.chat.id.0).await {
                                         send_channel_invite(bot, msg.chat.id).await;
                                     }
@@ -1198,6 +1175,17 @@ async fn main() -> anyhow::Result<()> {
              }
              respond(())
          });
+
+         let payments = Arc::new(Payments::new_from_env()?);
+    // create admin instance (adjust constructor if your Admin uses a different name)
+    let adm = admin::Admin::new_from_env();
+
+    // Manual prune for testing
+    if let Err(e) = payments.prune_and_ban_expired_subscribers(&bot, Some("chats2.csv")).await {
+        eprintln!("Manual prune failed: {:?}", e);
+    } else {
+        println!("Manual prune done");
+    }
  
     // unified callback handler for any pay:* callback
     let cb_handler = Update::filter_callback_query()
@@ -1391,6 +1379,8 @@ async fn main() -> anyhow::Result<()> {
         .await;
  
     Ok(())
+
+   
 }
  
 // new helper: send startup message + keyboard to user
@@ -1553,5 +1543,10 @@ async fn ensure_persistent_admin_keyboard(bot: &Bot, chat_id: ChatId, adm: &admi
     
             Ok(attempted)
         }
+
+
+        
     }
+
+
 

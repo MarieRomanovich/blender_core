@@ -817,26 +817,35 @@ impl Payments {
     /// Returns a map of user_id -> max expires_at (epoch seconds).
     pub fn load_latest_expiries_from_subs(&self) -> Result<std::collections::HashMap<i64, u64>> {
         let path = self.src_subs_path();
+        println!("DEBUG: Reading subs.json from {:?}", path);
         if !path.exists() {
+            println!("DEBUG: subs.json does not exist");
             return Ok(std::collections::HashMap::new());
         }
         let s = fs::read_to_string(&path)
             .with_context(|| format!("reading subs ledger {:?}", path))?;
+        println!("DEBUG: Raw subs.json content: {}", s);
         let arr: Vec<serde_json::Value> = if s.trim().is_empty() {
             Vec::new()
         } else {
             serde_json::from_str(&s).unwrap_or_else(|_| Vec::new())
         };
+        println!("DEBUG: Parsed arr: {:?}", arr);
 
         let mut latest: std::collections::HashMap<i64, u64> = std::collections::HashMap::new();
         for rec in arr {
+            println!("DEBUG: Processing record: {:?}", rec);
             if let (Some(user_id), Some(expires)) = (
                 rec.get("user_id").and_then(|v| v.as_i64()),
                 rec.get("expires_at").and_then(|v| v.as_u64()),
             ) {
+                println!("DEBUG: Extracted user_id: {}, expires: {}", user_id, expires);
                 latest.entry(user_id).and_modify(|e| *e = (*e).max(expires)).or_insert(expires);
+            } else {
+                println!("DEBUG: Failed to extract user_id or expires from record");
             }
         }
+        println!("DEBUG: Final latest map: {:?}", latest);
         Ok(latest)
     }
 
@@ -845,19 +854,26 @@ impl Payments {
     pub async fn prune_and_ban_expired_subscribers(&self, bot: &Bot, chats_csv: Option<&str>) -> Result<Vec<(i64,i64)>> {
         // Load latest expiries from subs.json
         let latest_expiries = self.load_latest_expiries_from_subs()?;
+        println!("DEBUG: Loaded expiries: {:?}", latest_expiries);
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
+        println!("DEBUG: Current time (epoch): {}", now);
         let mut removed = Vec::new();
         for (&user_id, &exp) in &latest_expiries {
+            println!("DEBUG: Checking user {} with exp {}", user_id, exp);
             if exp <= now {
+                println!("DEBUG: User {} is expired (exp {} <= now {})", user_id, exp, now);
                 removed.push(user_id);
+            } else {
+                println!("DEBUG: User {} is not expired (exp {} > now {})", user_id, exp, now);
             }
         }
 
         if removed.is_empty() {
+            println!("DEBUG: No expired users found");
             return Ok(vec![]);
         }
 
@@ -892,20 +908,21 @@ impl Payments {
         let csv_path = chats_csv.unwrap_or("chats2.csv");
         let chats = match self.load_target_chats(csv_path) {
             Ok(c) if !c.is_empty() => c,
-            _ => return Ok(vec![]),
+            _ => {
+                println!("DEBUG: No chats loaded from {}", csv_path);
+                return Ok(vec![]);
+            }
         };
 
+        println!("DEBUG: Found {} expired users, {} chats to ban from", removed.len(), chats.len());
         let mut attempted = Vec::new();
-        for user_id in removed.into_iter() {
+        for user_id in removed.iter() {
             for &chat in &chats {
-                match bot.ban_chat_member(ChatId(chat), UserId(user_id as u64)).await {
-                    Ok(_) => {
-                        attempted.push((user_id, chat));
-                    }
-                    Err(err) => {
-                        eprintln!("Failed to ban {} from {}: {:?}", user_id, chat, err);
-                        attempted.push((user_id, chat));
-                    }
+                attempted.push((*user_id, chat));
+                println!("DEBUG: Attempting to ban user {} from chat {}", user_id, chat);
+                match bot.ban_chat_member(ChatId(chat), UserId(*user_id as u64)).await {
+                    Ok(_) => println!("DEBUG: Successfully banned user {} from chat {}", user_id, chat),
+                    Err(err) => eprintln!("DEBUG: Failed to ban user {} from chat {}: {:?}", user_id, chat, err),
                 }
             }
         }
