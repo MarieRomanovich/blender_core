@@ -44,7 +44,7 @@ async fn send_startup_to_all(bot: &Bot) {
 
 Коротко о BLENDER — множество приваток, которые я лично отбирал с 2019 года и это самый дешевый и самый качественный агрегатор который вы могли только найти.
 
-Наш канал: [t.me/blender](https://t.me/+BtdRhhPojCZhMWM0)
+Наш канал: https://t.me/+BtdRhhPojCZhMWM0
 Поддержка: @ex_managers
 
 🔻 Сумма всех приваток: 7394$/мес
