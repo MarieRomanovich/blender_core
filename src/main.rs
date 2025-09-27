@@ -1245,17 +1245,16 @@ async fn main() -> anyhow::Result<()> {
 
 ⚫️Pro Mint 
 ⚫️FACKBLOCK
-⚫️001k
 ⚫️Вишня 
 ⚫️Фармилка | Пирожок
 ⚫️2TOP Squad
 ⚫️Crypton Prime
 ⚫️Coin Metrika
 ⚫️CRYPTUS 
-⚫️20/80 Crypto Headlines
 
 Коллеры:
 
+⚫️001k
 ⚫️D Trade ( 3333$/год )
 ⚫️D ( с 1к$ до 500к$ )
 ⚫️Слезы Сатоши
@@ -1265,8 +1264,10 @@ async fn main() -> anyhow::Result<()> {
 ⚫️BOBA
 ⚫️Mr.Mozart
 ⚫️maloletoff
-⚫️Картель
 ⚫️ARBUZ REBORN
+⚫️20/80 Crypto Headlines
+⚫️Ftmm Club
+
 
 Прочее:
 

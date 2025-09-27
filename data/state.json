@@ -17,7 +17,8 @@
   "paid_forced": false,
   "paid_invoice_id": -1,
   "promo_pending": {
-    "1283416844": false
+    "1283416844": false,
+    "7022881951": true
   },
   "public_keyboard_msgs": {
     "-1002560494562": 42,
