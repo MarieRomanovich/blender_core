@@ -294,7 +294,7 @@ async fn show_catalog(bot: &Bot, chat_id: ChatId, _page: usize) {
     }
 
     // Send catalog as plain text (no buttons)
-    let mut body = String::from("Доступные чаты:\n\n");
+    let mut body = String::from("Доступные приватки:\n\n");
     for (_id, title, ctype) in items.iter().take(1000) {
         body.push_str(&format!("{} {}\n", type_icon(ctype), title));
     }
@@ -564,34 +564,34 @@ async fn handle_message(
                 // NEW: send congratulatory message
                 let _ = bot.send_message(msg.chat.id, "Поздравляем, вам предоставлен бесплатный доступ!").await;
                 // send folders message
-                let aktiv_url = reqwest::Url::parse("https://t.me/addlist/Q3mkHDAfwjYyYjU0").ok();
-                let ludiki_url = reqwest::Url::parse("https://t.me/addlist/TyvbTgRFp5QwY2Y0").ok();
-                let farm_url = reqwest::Url::parse("https://t.me/addlist/qzsI2WN7hXExNTdk").ok();
-                let other_url = reqwest::Url::parse("https://t.me/addlist/Gy2SNd_HDPNjNmY0").ok();
+                let aktiv_url = reqwest::Url::parse("https://t.me/+6ijtpT3Vu-s4OWE8").ok();
+                let ludiki_url = reqwest::Url::parse("https://t.me/+e510p8wH7y4wMDNk").ok();
+                let farm_url = reqwest::Url::parse("https://t.me/+ROhJrHn5Cy5iZjBk").ok();
+                let other_url = reqwest::Url::parse("https://t.me/+DRLJ6FGkbIw4Yzhk").ok();
 //////////////////////////////////////////////////////////6
                 
                 // NEW: extra folder links (replace with actual URLs)
-                let extra1_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_5").ok();
-                let extra2_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_6").ok();
-                let extra3_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_7").ok();
-                let extra4_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_8").ok();
-                let extra5_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_9").ok();
-                let extra6_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_10").ok();
-                let extra7_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_11").ok();
+                let extra1_url = reqwest::Url::parse("https://t.me/+PZsUcAGY8IkxYzFk").ok();
+                let extra2_url = reqwest::Url::parse("https://t.me/+zZoVR5OFL4EyYjE0").ok();
+                let extra3_url = reqwest::Url::parse("https://t.me/+e9_zYaHDe740MDhk").ok();
+                let extra4_url = reqwest::Url::parse("https://t.me/+ga0sy38tnEk3Mzk0").ok();
+                let extra5_url = reqwest::Url::parse("https://t.me/+d7dWr2-gkQM2OWJk").ok();
+                let extra6_url = reqwest::Url::parse("https://t.me/+CW09KvS-I21lOTc0").ok();
+                let extra7_url = reqwest::Url::parse("https://t.me/+Rd0IfHW2grE2ZDg0").ok();
                 // NEW FIVE: add these (Папка 12..16)
-                let extra8_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_12").ok();
-                let extra9_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_13").ok();
-                let extra10_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_14").ok();
-                let extra11_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_15").ok();
-                let extra12_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_16").ok();
+                let extra8_url = reqwest::Url::parse("https://t.me/+TUWvGB3u6tQ2Yzhk").ok();
+                let extra9_url = reqwest::Url::parse("https://t.me/+NwjRcYQarCdmZmM0").ok();
+                let extra10_url = reqwest::Url::parse("https://t.me/+tDk9DznOnM0wMDM0").ok();
+                let extra11_url = reqwest::Url::parse("https://t.me/+c11UZmYIpg82MGVk").ok();
+                let extra12_url = reqwest::Url::parse("https://t.me/+nJYNboleekczYmNk").ok();
                 // NEW: seven more folders (17..23) — replace placeholders with real links
-               let extra13_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_17").ok();
-               let extra14_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_18").ok();
-               let extra15_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_19").ok();
-               let extra16_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_20").ok();
-               let extra17_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_21").ok();
-               let extra18_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_22").ok();
-               let extra19_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_23").ok();
+               let extra13_url = reqwest::Url::parse("https://t.me/+Cnm7nVymdA8zZTU0").ok();
+               let extra14_url = reqwest::Url::parse("https://t.me/+aH5gcZIR8yhmODJk").ok();
+               let extra15_url = reqwest::Url::parse("https://t.me/+lpj3j7kJFYQ4MzBk").ok();
+               let extra16_url = reqwest::Url::parse("https://t.me/+1ut-BzIliq1kNjQ8").ok();
+               let extra17_url = reqwest::Url::parse("https://t.me/+5TqlV497tUljMTlk").ok();
+               let extra18_url = reqwest::Url::parse("https://t.me/+3K5aeNnaw8wzMTVk").ok();
+               let extra19_url = reqwest::Url::parse("https://t.me/+OdStBvLy73s0MjU0").ok();
 
 
                 let make_btn = |label: &str, url_opt: Option<reqwest::Url>, cb: &str| {
@@ -600,36 +600,35 @@ async fn handle_message(
                         .unwrap_or_else(|| InlineKeyboardButton::callback(label.to_string(), cb.to_string()))
                 };
 
-                // single-line keyboard: put all buttons into one row
-                let all_buttons = vec![
-                    make_btn("АКТИВНОСТИ +", aktiv_url, "show_folder:активности"),
-                    make_btn("ЛУДИКИ", ludiki_url, "show_folder:лудики"),
-                    make_btn("Фармилка", farm_url, "show_folder:farmilka"),
-                    make_btn("Прочее", other_url, "show_folder:other"),
-                    make_btn("Папка 5", extra1_url, "show_folder:5"),
-                    make_btn("Папка 6", extra2_url, "show_folder:6"),
-                    make_btn("Папка 7", extra3_url, "show_folder:7"),
-                    make_btn("Папка 8", extra4_url, "show_folder:8"),
-                    make_btn("Папка 9", extra5_url, "show_folder:9"),
-                    make_btn("Папка 10", extra6_url, "show_folder:10"),
-                    make_btn("Папка 11", extra7_url, "show_folder:11"),
-                    make_btn("Папка 12", extra8_url, "show_folder:12"),
-                    make_btn("Папка 13", extra9_url, "show_folder:13"),
-                    make_btn("Папка 14", extra10_url, "show_folder:14"),
-                    make_btn("Папка 15", extra11_url, "show_folder:15"),
-                    make_btn("Папка 16", extra12_url, "show_folder:16"),
-                    make_btn("Папка 17", extra13_url, "show_folder:17"),
-                    make_btn("Папка 18", extra14_url, "show_folder:18"),
-                    make_btn("Папка 19", extra15_url, "show_folder:19"),
-                    make_btn("Папка 20", extra16_url, "show_folder:20"),
-                    make_btn("Папка 21", extra17_url, "show_folder:21"),
-                    make_btn("Папка 22", extra18_url, "show_folder:22"),
-                    make_btn("Папка 23", extra19_url, "show_folder:23"),
-                ];
-                let kb = InlineKeyboardMarkup::new(vec![all_buttons]);
+                // one button per row: each row contains a single button so buttons appear vertically
+                let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+                rows.push(vec![ make_btn("Pro Mint", aktiv_url, "show_folder:активности") ]);
+                rows.push(vec![ make_btn("FACKBLOCK", ludiki_url, "show_folder:лудики") ]);
+                rows.push(vec![ make_btn("Вишня", farm_url, "show_folder:farmilka") ]);
+                rows.push(vec![ make_btn("Crypton Prime", other_url, "show_folder:other") ]);
+                rows.push(vec![ make_btn("Coin Metrika", extra1_url, "show_folder:5") ]);
+                rows.push(vec![ make_btn("CRYPTUS", extra2_url, "show_folder:6") ]);
+                rows.push(vec![ make_btn("Dolbaeb Trade", extra3_url, "show_folder:7") ]);
+                rows.push(vec![ make_btn("D ( с 1к$ до 500к$ )", extra4_url, "show_folder:8") ]);
+                rows.push(vec![ make_btn("Слезы Сатоши", extra5_url, "show_folder:9") ]);
+                rows.push(vec![ make_btn("Крипто Свин", extra6_url, "show_folder:10") ]);
+                rows.push(vec![ make_btn("Коля Флипает", extra7_url, "show_folder:11") ]);
+                rows.push(vec![ make_btn("arty private", extra8_url, "show_folder:12") ]);
+                rows.push(vec![ make_btn("ramar shitpost", extra9_url, "show_folder:13") ]);
+                rows.push(vec![ make_btn("Трахать сок, пить сок", extra10_url, "show_folder:14") ]);
+                rows.push(vec![ make_btn("LanosPark", extra11_url, "show_folder:15") ]);
+                rows.push(vec![ make_btn("kd parser", extra12_url, "show_folder:16") ]);
+                rows.push(vec![ make_btn("kd не балуется", extra13_url, "show_folder:17") ]);
+                rows.push(vec![ make_btn("ARBUZ REBORN", extra14_url, "show_folder:18") ]);
+                rows.push(vec![ make_btn("BOBA", extra15_url, "show_folder:19") ]);
+                rows.push(vec![ make_btn("Mr.Mozart", extra16_url, "show_folder:20") ]);
+                rows.push(vec![ make_btn("maloletoff", extra17_url, "show_folder:21") ]);
+                rows.push(vec![ make_btn("20/80 Crypto Hadlines", extra18_url, "show_folder:22") ]);
+                rows.push(vec![ make_btn("Lopata Pro", extra19_url, "show_folder:23") ]);
+                let kb = InlineKeyboardMarkup::new(rows);
  
                 println!("DEBUG: promo flow - attempting to send folders keyboard to chat {}", msg.chat.id.0);
-                match bot.send_message(msg.chat.id, "Папки с каналами:").reply_markup(kb).await {
+                match bot.send_message(msg.chat.id, "Доступные приватки:").reply_markup(kb).await {
                     Ok(m) => println!("DEBUG: promo folders keyboard sent, msg_id={}", m.id.0),
                     Err(e) => eprintln!("ERROR: promo - failed to send folders keyboard to {}: {:?}", msg.chat.id.0, e),
                 }
@@ -687,33 +686,34 @@ async fn handle_message(
                     eprintln!("failed to set used promo: {:?}", e);
                 }
                 // send folders message
-                let aktiv_url = reqwest::Url::parse("https://t.me/addlist/Q3mkHDAfwjYyYjU0").ok();
-                let ludiki_url = reqwest::Url::parse("https://t.me/addlist/TyvbTgRFp5QwY2Y0").ok();
-                let farm_url = reqwest::Url::parse("https://t.me/addlist/qzsI2WN7hXExNTdk").ok();
-                let other_url = reqwest::Url::parse("https://t.me/addlist/Gy2SNd_HDPNjNmY0").ok();
-//////////////////////////////////////////////////////
+                let aktiv_url = reqwest::Url::parse("https://t.me/+6ijtpT3Vu-s4OWE8").ok();
+                let ludiki_url = reqwest::Url::parse("https://t.me/+e510p8wH7y4wMDNk").ok();
+                let farm_url = reqwest::Url::parse("https://t.me/+ROhJrHn5Cy5iZjBk").ok();
+                let other_url = reqwest::Url::parse("https://t.me/+DRLJ6FGkbIw4Yzhk").ok();
+//////////////////////////////////////////////////////////6
+                
                 // NEW: extra folder links (replace with actual URLs)
-                let extra1_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_5").ok();
-                let extra2_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_6").ok();
-                let extra3_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_7").ok();
-                let extra4_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_8").ok();
-                let extra5_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_9").ok();
-                let extra6_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_10").ok();
-                let extra7_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_11").ok();
+                let extra1_url = reqwest::Url::parse("https://t.me/+PZsUcAGY8IkxYzFk").ok();
+                let extra2_url = reqwest::Url::parse("https://t.me/+zZoVR5OFL4EyYjE0").ok();
+                let extra3_url = reqwest::Url::parse("https://t.me/+e9_zYaHDe740MDhk").ok();
+                let extra4_url = reqwest::Url::parse("https://t.me/+ga0sy38tnEk3Mzk0").ok();
+                let extra5_url = reqwest::Url::parse("https://t.me/+d7dWr2-gkQM2OWJk").ok();
+                let extra6_url = reqwest::Url::parse("https://t.me/+CW09KvS-I21lOTc0").ok();
+                let extra7_url = reqwest::Url::parse("https://t.me/+Rd0IfHW2grE2ZDg0").ok();
                 // NEW FIVE: add these (Папка 12..16)
-                let extra8_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_12").ok();
-                let extra9_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_13").ok();
-                let extra10_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_14").ok();
-                let extra11_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_15").ok();
-                let extra12_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_16").ok();
+                let extra8_url = reqwest::Url::parse("https://t.me/+TUWvGB3u6tQ2Yzhk").ok();
+                let extra9_url = reqwest::Url::parse("https://t.me/+NwjRcYQarCdmZmM0").ok();
+                let extra10_url = reqwest::Url::parse("https://t.me/+tDk9DznOnM0wMDM0").ok();
+                let extra11_url = reqwest::Url::parse("https://t.me/+c11UZmYIpg82MGVk").ok();
+                let extra12_url = reqwest::Url::parse("https://t.me/+nJYNboleekczYmNk").ok();
                 // NEW: seven more folders (17..23) — replace placeholders with real links
-               let extra13_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_17").ok();
-               let extra14_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_18").ok();
-               let extra15_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_19").ok();
-               let extra16_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_20").ok();
-               let extra17_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_21").ok();
-               let extra18_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_22").ok();
-               let extra19_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_23").ok();
+               let extra13_url = reqwest::Url::parse("https://t.me/+Cnm7nVymdA8zZTU0").ok();
+               let extra14_url = reqwest::Url::parse("https://t.me/+aH5gcZIR8yhmODJk").ok();
+               let extra15_url = reqwest::Url::parse("https://t.me/+lpj3j7kJFYQ4MzBk").ok();
+               let extra16_url = reqwest::Url::parse("https://t.me/+1ut-BzIliq1kNjQ8").ok();
+               let extra17_url = reqwest::Url::parse("https://t.me/+5TqlV497tUljMTlk").ok();
+               let extra18_url = reqwest::Url::parse("https://t.me/+3K5aeNnaw8wzMTVk").ok();
+               let extra19_url = reqwest::Url::parse("https://t.me/+OdStBvLy73s0MjU0").ok();
 
 
                 let make_btn = |label: &str, url_opt: Option<reqwest::Url>, cb: &str| {
@@ -722,36 +722,36 @@ async fn handle_message(
                         .unwrap_or_else(|| InlineKeyboardButton::callback(label.to_string(), cb.to_string()))
                 };
 
-                // single-line keyboard: put all buttons into one row
-                let all_buttons = vec![
-                    make_btn("АКТИВНОСТИ +", aktiv_url, "show_folder:активности"),
-                    make_btn("ЛУДИКИ", ludiki_url, "show_folder:лудики"),
-                    make_btn("Фармилка", farm_url, "show_folder:farmilka"),
-                    make_btn("Прочее", other_url, "show_folder:other"),
-                    make_btn("Папка 5", extra1_url, "show_folder:5"),
-                    make_btn("Папка 6", extra2_url, "show_folder:6"),
-                    make_btn("Папка 7", extra3_url, "show_folder:7"),
-                    make_btn("Папка 8", extra4_url, "show_folder:8"),
-                    make_btn("Папка 9", extra5_url, "show_folder:9"),
-                    make_btn("Папка 10", extra6_url, "show_folder:10"),
-                    make_btn("Папка 11", extra7_url, "show_folder:11"),
-                    make_btn("Папка 12", extra8_url, "show_folder:12"),
-                    make_btn("Папка 13", extra9_url, "show_folder:13"),
-                    make_btn("Папка 14", extra10_url, "show_folder:14"),
-                    make_btn("Папка 15", extra11_url, "show_folder:15"),
-                    make_btn("Папка 16", extra12_url, "show_folder:16"),
-                    make_btn("Папка 17", extra13_url, "show_folder:17"),
-                    make_btn("Папка 18", extra14_url, "show_folder:18"),
-                    make_btn("Папка 19", extra15_url, "show_folder:19"),
-                    make_btn("Папка 20", extra16_url, "show_folder:20"),
-                    make_btn("Папка 21", extra17_url, "show_folder:21"),
-                    make_btn("Папка 22", extra18_url, "show_folder:22"),
-                    make_btn("Папка 23", extra19_url, "show_folder:23"),
-                ];
-                let kb = InlineKeyboardMarkup::new(vec![all_buttons]);
+                // one button per row: each row contains a single button so buttons appear vertically
+                let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+                rows.push(vec![ make_btn("Pro Mint", aktiv_url, "show_folder:активности") ]);
+                rows.push(vec![ make_btn("FACKBLOCK", ludiki_url, "show_folder:лудики") ]);
+                rows.push(vec![ make_btn("Вишня", farm_url, "show_folder:farmilka") ]);
+                rows.push(vec![ make_btn("Crypton Prime", other_url, "show_folder:other") ]);
+                rows.push(vec![ make_btn("Coin Metrika", extra1_url, "show_folder:5") ]);
+                rows.push(vec![ make_btn("CRYPTUS", extra2_url, "show_folder:6") ]);
+                rows.push(vec![ make_btn("Dolbaeb Trade", extra3_url, "show_folder:7") ]);
+                rows.push(vec![ make_btn("D ( с 1к$ до 500к$ )", extra4_url, "show_folder:8") ]);
+                rows.push(vec![ make_btn("Слезы Сатоши", extra5_url, "show_folder:9") ]);
+                rows.push(vec![ make_btn("Крипто Свин", extra6_url, "show_folder:10") ]);
+                rows.push(vec![ make_btn("Коля Флипает", extra7_url, "show_folder:11") ]);
+                rows.push(vec![ make_btn("arty private", extra8_url, "show_folder:12") ]);
+                rows.push(vec![ make_btn("ramar shitpost", extra9_url, "show_folder:13") ]);
+                rows.push(vec![ make_btn("Трахать сок, пить сок", extra10_url, "show_folder:14") ]);
+                rows.push(vec![ make_btn("LanosPark", extra11_url, "show_folder:15") ]);
+                rows.push(vec![ make_btn("kd parser", extra12_url, "show_folder:16") ]);
+                rows.push(vec![ make_btn("kd не балуется", extra13_url, "show_folder:17") ]);
+                rows.push(vec![ make_btn("ARBUZ REBORN", extra14_url, "show_folder:18") ]);
+                rows.push(vec![ make_btn("BOBA", extra15_url, "show_folder:19") ]);
+                rows.push(vec![ make_btn("Mr.Mozart", extra16_url, "show_folder:20") ]);
+                rows.push(vec![ make_btn("maloletoff", extra17_url, "show_folder:21") ]);
+                rows.push(vec![ make_btn("20/80 Crypto Hadlines", extra18_url, "show_folder:22") ]);
+                rows.push(vec![ make_btn("Lopata Pro", extra19_url, "show_folder:23") ]);
+                let kb = InlineKeyboardMarkup::new(rows);
+ 
  
                 println!("DEBUG: promo flow - attempting to send folders keyboard to chat {}", msg.chat.id.0);
-                match bot.send_message(msg.chat.id, "Папки с каналами:").reply_markup(kb).await {
+                match bot.send_message(msg.chat.id, "Доступные приватки:").reply_markup(kb).await {
                     Ok(m) => println!("DEBUG: promo folders keyboard sent, msg_id={}", m.id.0),
                     Err(e) => eprintln!("ERROR: promo - failed to send folders keyboard to {}: {:?}", msg.chat.id.0, e),
                 }
@@ -808,36 +808,35 @@ async fn handle_message(
                 if let Err(e) = write_json_atomic(STATE_PATH, &st) {
                     eprintln!("failed to set used promo: {:?}", e);
                 }
-//////////////////////////////////////////////////////
                 // send folders message
-                let aktiv_url = reqwest::Url::parse("https://t.me/addlist/Q3mkHDAfwjYyYjU0").ok();
-                let ludiki_url = reqwest::Url::parse("https://t.me/addlist/TyvbTgRFp5QwY2Y0").ok();
-                let farm_url = reqwest::Url::parse("https://t.me/addlist/qzsI2WN7hXExNTdk").ok();
-                let other_url = reqwest::Url::parse("https://t.me/addlist/Gy2SNd_HDPNjNmY0").ok();
-
+                let aktiv_url = reqwest::Url::parse("https://t.me/+6ijtpT3Vu-s4OWE8").ok();
+                let ludiki_url = reqwest::Url::parse("https://t.me/+e510p8wH7y4wMDNk").ok();
+                let farm_url = reqwest::Url::parse("https://t.me/+ROhJrHn5Cy5iZjBk").ok();
+                let other_url = reqwest::Url::parse("https://t.me/+DRLJ6FGkbIw4Yzhk").ok();
+//////////////////////////////////////////////////////////6
+                
                 // NEW: extra folder links (replace with actual URLs)
-                let extra1_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_5").ok();
-                let extra2_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_6").ok();
-                let extra3_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_7").ok();
-                let extra4_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_8").ok();
-                let extra5_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_9").ok();
-                let extra6_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_10").ok();
-                let extra7_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_11").ok();
+                let extra1_url = reqwest::Url::parse("https://t.me/+PZsUcAGY8IkxYzFk").ok();
+                let extra2_url = reqwest::Url::parse("https://t.me/+zZoVR5OFL4EyYjE0").ok();
+                let extra3_url = reqwest::Url::parse("https://t.me/+e9_zYaHDe740MDhk").ok();
+                let extra4_url = reqwest::Url::parse("https://t.me/+ga0sy38tnEk3Mzk0").ok();
+                let extra5_url = reqwest::Url::parse("https://t.me/+d7dWr2-gkQM2OWJk").ok();
+                let extra6_url = reqwest::Url::parse("https://t.me/+CW09KvS-I21lOTc0").ok();
+                let extra7_url = reqwest::Url::parse("https://t.me/+Rd0IfHW2grE2ZDg0").ok();
                 // NEW FIVE: add these (Папка 12..16)
-                let extra8_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_12").ok();
-                let extra9_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_13").ok();
-                let extra10_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_14").ok();
-                let extra11_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_15").ok();
-                let extra12_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_16").ok();
+                let extra8_url = reqwest::Url::parse("https://t.me/+TUWvGB3u6tQ2Yzhk").ok();
+                let extra9_url = reqwest::Url::parse("https://t.me/+NwjRcYQarCdmZmM0").ok();
+                let extra10_url = reqwest::Url::parse("https://t.me/+tDk9DznOnM0wMDM0").ok();
+                let extra11_url = reqwest::Url::parse("https://t.me/+c11UZmYIpg82MGVk").ok();
+                let extra12_url = reqwest::Url::parse("https://t.me/+nJYNboleekczYmNk").ok();
                 // NEW: seven more folders (17..23) — replace placeholders with real links
-               let extra13_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_17").ok();
-               let extra14_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_18").ok();
-               let extra15_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_19").ok();
-               let extra16_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_20").ok();
-               let extra17_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_21").ok();
-               let extra18_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_22").ok();
-               let extra19_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_23").ok();
-
+               let extra13_url = reqwest::Url::parse("https://t.me/+Cnm7nVymdA8zZTU0").ok();
+               let extra14_url = reqwest::Url::parse("https://t.me/+aH5gcZIR8yhmODJk").ok();
+               let extra15_url = reqwest::Url::parse("https://t.me/+lpj3j7kJFYQ4MzBk").ok();
+               let extra16_url = reqwest::Url::parse("https://t.me/+1ut-BzIliq1kNjQ8").ok();
+               let extra17_url = reqwest::Url::parse("https://t.me/+5TqlV497tUljMTlk").ok();
+               let extra18_url = reqwest::Url::parse("https://t.me/+3K5aeNnaw8wzMTVk").ok();
+               let extra19_url = reqwest::Url::parse("https://t.me/+OdStBvLy73s0MjU0").ok();
 
                 let make_btn = |label: &str, url_opt: Option<reqwest::Url>, cb: &str| {
                     url_opt
@@ -845,36 +844,37 @@ async fn handle_message(
                         .unwrap_or_else(|| InlineKeyboardButton::callback(label.to_string(), cb.to_string()))
                 };
 
-                // single-line keyboard: put all buttons into one row
-                let all_buttons = vec![
-                    make_btn("АКТИВНОСТИ +", aktiv_url, "show_folder:активности"),
-                    make_btn("ЛУДИКИ", ludiki_url, "show_folder:лудики"),
-                    make_btn("Фармилка", farm_url, "show_folder:farmilka"),
-                    make_btn("Прочее", other_url, "show_folder:other"),
-                    make_btn("Папка 5", extra1_url, "show_folder:5"),
-                    make_btn("Папка 6", extra2_url, "show_folder:6"),
-                    make_btn("Папка 7", extra3_url, "show_folder:7"),
-                    make_btn("Папка 8", extra4_url, "show_folder:8"),
-                    make_btn("Папка 9", extra5_url, "show_folder:9"),
-                    make_btn("Папка 10", extra6_url, "show_folder:10"),
-                    make_btn("Папка 11", extra7_url, "show_folder:11"),
-                    make_btn("Папка 12", extra8_url, "show_folder:12"),
-                    make_btn("Папка 13", extra9_url, "show_folder:13"),
-                    make_btn("Папка 14", extra10_url, "show_folder:14"),
-                    make_btn("Папка 15", extra11_url, "show_folder:15"),
-                    make_btn("Папка 16", extra12_url, "show_folder:16"),
-                    make_btn("Папка 17", extra13_url, "show_folder:17"),
-                    make_btn("Папка 18", extra14_url, "show_folder:18"),
-                    make_btn("Папка 19", extra15_url, "show_folder:19"),
-                    make_btn("Папка 20", extra16_url, "show_folder:20"),
-                    make_btn("Папка 21", extra17_url, "show_folder:21"),
-                    make_btn("Папка 22", extra18_url, "show_folder:22"),
-                    make_btn("Папка 23", extra19_url, "show_folder:23"),
-                ];
-                let kb = InlineKeyboardMarkup::new(vec![all_buttons]);
+                // one button per row: each row contains a single button so buttons appear vertically
+                let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+                rows.push(vec![ make_btn("Pro Mint", aktiv_url, "show_folder:активности") ]);
+                rows.push(vec![ make_btn("FACKBLOCK", ludiki_url, "show_folder:лудики") ]);
+                rows.push(vec![ make_btn("Вишня", farm_url, "show_folder:farmilka") ]);
+                rows.push(vec![ make_btn("Crypton Prime", other_url, "show_folder:other") ]);
+                rows.push(vec![ make_btn("Coin Metrika", extra1_url, "show_folder:5") ]);
+                rows.push(vec![ make_btn("CRYPTUS", extra2_url, "show_folder:6") ]);
+                rows.push(vec![ make_btn("Dolbaeb Trade", extra3_url, "show_folder:7") ]);
+                rows.push(vec![ make_btn("D ( с 1к$ до 500к$ )", extra4_url, "show_folder:8") ]);
+                rows.push(vec![ make_btn("Слезы Сатоши", extra5_url, "show_folder:9") ]);
+                rows.push(vec![ make_btn("Крипто Свин", extra6_url, "show_folder:10") ]);
+                rows.push(vec![ make_btn("Коля Флипает", extra7_url, "show_folder:11") ]);
+                rows.push(vec![ make_btn("arty private", extra8_url, "show_folder:12") ]);
+                rows.push(vec![ make_btn("ramar shitpost", extra9_url, "show_folder:13") ]);
+                rows.push(vec![ make_btn("Трахать сок, пить сок", extra10_url, "show_folder:14") ]);
+                rows.push(vec![ make_btn("LanosPark", extra11_url, "show_folder:15") ]);
+                rows.push(vec![ make_btn("kd parser", extra12_url, "show_folder:16") ]);
+                rows.push(vec![ make_btn("kd не балуется", extra13_url, "show_folder:17") ]);
+                rows.push(vec![ make_btn("ARBUZ REBORN", extra14_url, "show_folder:18") ]);
+                rows.push(vec![ make_btn("BOBA", extra15_url, "show_folder:19") ]);
+                rows.push(vec![ make_btn("Mr.Mozart", extra16_url, "show_folder:20") ]);
+                rows.push(vec![ make_btn("maloletoff", extra17_url, "show_folder:21") ]);
+                rows.push(vec![ make_btn("20/80 Crypto Hadlines", extra18_url, "show_folder:22") ]);
+                rows.push(vec![ make_btn("Lopata Pro", extra19_url, "show_folder:23") ]);
+                
+ 
+                let kb = InlineKeyboardMarkup::new(rows);
  
                 println!("DEBUG: promo flow - attempting to send folders keyboard to chat {}", msg.chat.id.0);
-                match bot.send_message(msg.chat.id, "Папки с каналами:").reply_markup(kb).await {
+                match bot.send_message(msg.chat.id, "Доступные приватки:").reply_markup(kb).await {
                     Ok(m) => println!("DEBUG: promo folders keyboard sent, msg_id={}", m.id.0),
                     Err(e) => eprintln!("ERROR: promo - failed to send folders keyboard to {}: {:?}", msg.chat.id.0, e),
                 }
@@ -1115,71 +1115,73 @@ async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Paym
                     }
 
                     // NEW: send the folders message with buttons (moved from handle_check_callback)
-                    let aktiv_url = reqwest::Url::parse("https://t.me/addlist/Q3mkHDAfwjYyYjU0").ok();
-                    let ludiki_url = reqwest::Url::parse("https://t.me/addlist/TyvbTgRFp5QwY2Y0").ok();
-                    let farm_url = reqwest::Url::parse("https://t.me/addlist/qzsI2WN7hXExNTdk").ok();
-                    let other_url = reqwest::Url::parse("https://t.me/addlist/Gy2SNd_HDPNjNmY0").ok();
-
-                    let make_btn = |label: &str, url_opt: Option<reqwest::Url>, cb: &str| {
-                        url_opt
-                            .map(|u| InlineKeyboardButton::url(label.to_string(), u))
-                            .unwrap_or_else(|| InlineKeyboardButton::callback(label.to_string(), cb.to_string()))
-                    };
-
- ///////////////////////////////                   //HEREEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-
-                let extra1_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_5").ok();
-                let extra2_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_6").ok();
-                let extra3_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_7").ok();
-                let extra4_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_8").ok();
-                let extra5_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_9").ok();
-                let extra6_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_10").ok();
-                let extra7_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_11").ok();
+                    let aktiv_url = reqwest::Url::parse("https://t.me/+6ijtpT3Vu-s4OWE8").ok();
+                let ludiki_url = reqwest::Url::parse("https://t.me/+e510p8wH7y4wMDNk").ok();
+                let farm_url = reqwest::Url::parse("https://t.me/+ROhJrHn5Cy5iZjBk").ok();
+                let other_url = reqwest::Url::parse("https://t.me/+DRLJ6FGkbIw4Yzhk").ok();
+//////////////////////////////////////////////////////////6
+                
+                // NEW: extra folder links (replace with actual URLs)
+                let extra1_url = reqwest::Url::parse("https://t.me/+PZsUcAGY8IkxYzFk").ok();
+                let extra2_url = reqwest::Url::parse("https://t.me/+zZoVR5OFL4EyYjE0").ok();
+                let extra3_url = reqwest::Url::parse("https://t.me/+e9_zYaHDe740MDhk").ok();
+                let extra4_url = reqwest::Url::parse("https://t.me/+ga0sy38tnEk3Mzk0").ok();
+                let extra5_url = reqwest::Url::parse("https://t.me/+d7dWr2-gkQM2OWJk").ok();
+                let extra6_url = reqwest::Url::parse("https://t.me/+CW09KvS-I21lOTc0").ok();
+                let extra7_url = reqwest::Url::parse("https://t.me/+Rd0IfHW2grE2ZDg0").ok();
                 // NEW FIVE: add these (Папка 12..16)
-                let extra8_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_12").ok();
-                let extra9_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_13").ok();
-                let extra10_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_14").ok();
-                let extra11_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_15").ok();
-                let extra12_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_16").ok();
+                let extra8_url = reqwest::Url::parse("https://t.me/+TUWvGB3u6tQ2Yzhk").ok();
+                let extra9_url = reqwest::Url::parse("https://t.me/+NwjRcYQarCdmZmM0").ok();
+                let extra10_url = reqwest::Url::parse("https://t.me/+tDk9DznOnM0wMDM0").ok();
+                let extra11_url = reqwest::Url::parse("https://t.me/+c11UZmYIpg82MGVk").ok();
+                let extra12_url = reqwest::Url::parse("https://t.me/+nJYNboleekczYmNk").ok();
                 // NEW: seven more folders (17..23) — replace placeholders with real links
-               let extra13_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_17").ok();
-               let extra14_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_18").ok();
-               let extra15_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_19").ok();
-               let extra16_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_20").ok();
-               let extra17_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_21").ok();
-               let extra18_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_22").ok();
-               let extra19_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_23").ok();
+               let extra13_url = reqwest::Url::parse("https://t.me/+Cnm7nVymdA8zZTU0").ok();
+               let extra14_url = reqwest::Url::parse("https://t.me/+aH5gcZIR8yhmODJk").ok();
+               let extra15_url = reqwest::Url::parse("https://t.me/+lpj3j7kJFYQ4MzBk").ok();
+               let extra16_url = reqwest::Url::parse("https://t.me/+1ut-BzIliq1kNjQ8").ok();
+               let extra17_url = reqwest::Url::parse("https://t.me/+5TqlV497tUljMTlk").ok();
+               let extra18_url = reqwest::Url::parse("https://t.me/+3K5aeNnaw8wzMTVk").ok();
+               let extra19_url = reqwest::Url::parse("https://t.me/+OdStBvLy73s0MjU0").ok();
+
+               let make_btn = |label: &str, url_opt: Option<reqwest::Url>, cb: &str| {
+                    url_opt
+                        .map(|u| InlineKeyboardButton::url(label.to_string(), u))
+                        .unwrap_or_else(|| InlineKeyboardButton::callback(label.to_string(), cb.to_string()))
+                };
 
 
-                    // single-line keyboard: put all buttons into one row
-                    let all_buttons = vec![
-                        make_btn("АКТИВНОСТИ +", aktiv_url, "show_folder:активности"),
-                        make_btn("ЛУДИКИ", ludiki_url, "show_folder:lудики"),
-                        make_btn("Фармилка", farm_url, "show_folder:farmilka"),
-                        make_btn("Прочее", other_url, "show_folder:other"),
-                        make_btn("Папка 5", extra1_url, "show_folder:5"),
-                        make_btn("Папка 6", extra2_url, "show_folder:6"),
-                        make_btn("Папка 7", extra3_url, "show_folder:7"),
-                        make_btn("Папка 8", extra4_url, "show_folder:8"),
-                        make_btn("Папка 9", extra5_url, "show_folder:9"),
-                        make_btn("Папка 10", extra6_url, "show_folder:10"),
-                        make_btn("Папка 11", extra7_url, "show_folder:11"),
-                        make_btn("Папка 12", extra8_url, "show_folder:12"),
-                        make_btn("Папка 13", extra9_url, "show_folder:13"),
-                        make_btn("Папка 14", extra10_url, "show_folder:14"),
-                        make_btn("Папка 15", extra11_url, "show_folder:15"),
-                        make_btn("Папка 16", extra12_url, "show_folder:16"),
-                        make_btn("Папка 17", extra13_url, "show_folder:17"),
-                        make_btn("Папка 18", extra14_url, "show_folder:18"),
-                        make_btn("Папка 19", extra15_url, "show_folder:19"),
-                        make_btn("Папка 20", extra16_url, "show_folder:20"),
-                        make_btn("Папка 21", extra17_url, "show_folder:21"),
-                        make_btn("Папка 22", extra18_url, "show_folder:22"),
-                        make_btn("Папка 23", extra19_url, "show_folder:23"),
-                    ];
-                    let kb = InlineKeyboardMarkup::new(vec![all_buttons]);
 
-                    let _ = bot.send_message(ChatId(user_id), "Папки с каналами:").reply_markup(kb).await;
+
+                // one button per row: each row contains a single button so buttons appear vertically
+                let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+                rows.push(vec![ make_btn("Pro Mint", aktiv_url, "show_folder:активности") ]);
+                rows.push(vec![ make_btn("FACKBLOCK", ludiki_url, "show_folder:лудики") ]);
+                rows.push(vec![ make_btn("Вишня", farm_url, "show_folder:farmilka") ]);
+                rows.push(vec![ make_btn("Crypton Prime", other_url, "show_folder:other") ]);
+                rows.push(vec![ make_btn("Coin Metrika", extra1_url, "show_folder:5") ]);
+                rows.push(vec![ make_btn("CRYPTUS", extra2_url, "show_folder:6") ]);
+                rows.push(vec![ make_btn("Dolbaeb Trade", extra3_url, "show_folder:7") ]);
+                rows.push(vec![ make_btn("D ( с 1к$ до 500к$ )", extra4_url, "show_folder:8") ]);
+                rows.push(vec![ make_btn("Слезы Сатоши", extra5_url, "show_folder:9") ]);
+                rows.push(vec![ make_btn("Крипто Свин", extra6_url, "show_folder:10") ]);
+                rows.push(vec![ make_btn("Коля Флипает", extra7_url, "show_folder:11") ]);
+                rows.push(vec![ make_btn("arty private", extra8_url, "show_folder:12") ]);
+                rows.push(vec![ make_btn("ramar shitpost", extra9_url, "show_folder:13") ]);
+                rows.push(vec![ make_btn("Трахать сок, пить сок", extra10_url, "show_folder:14") ]);
+                rows.push(vec![ make_btn("LanosPark", extra11_url, "show_folder:15") ]);
+                rows.push(vec![ make_btn("kd parser", extra12_url, "show_folder:16") ]);
+                rows.push(vec![ make_btn("kd не балуется", extra13_url, "show_folder:17") ]);
+                rows.push(vec![ make_btn("ARBUZ REBORN", extra14_url, "show_folder:18") ]);
+                rows.push(vec![ make_btn("BOBA", extra15_url, "show_folder:19") ]);
+                rows.push(vec![ make_btn("Mr.Mozart", extra16_url, "show_folder:20") ]);
+                rows.push(vec![ make_btn("maloletoff", extra17_url, "show_folder:21") ]);
+                rows.push(vec![ make_btn("20/80 Crypto Hadlines", extra18_url, "show_folder:22") ]);
+                rows.push(vec![ make_btn("Lopata Pro", extra19_url, "show_folder:23") ]);
+                let kb = InlineKeyboardMarkup::new(rows);
+ 
+
+                    let _ = bot.send_message(ChatId(user_id), "Доступные приватки:").reply_markup(kb).await;
 
                     let _ = bot
                         .edit_message_text(
