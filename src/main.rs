@@ -568,6 +568,31 @@ async fn handle_message(
                 let ludiki_url = reqwest::Url::parse("https://t.me/addlist/TyvbTgRFp5QwY2Y0").ok();
                 let farm_url = reqwest::Url::parse("https://t.me/addlist/qzsI2WN7hXExNTdk").ok();
                 let other_url = reqwest::Url::parse("https://t.me/addlist/Gy2SNd_HDPNjNmY0").ok();
+//////////////////////////////////////////////////////////6
+                
+                // NEW: extra folder links (replace with actual URLs)
+                let extra1_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_5").ok();
+                let extra2_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_6").ok();
+                let extra3_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_7").ok();
+                let extra4_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_8").ok();
+                let extra5_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_9").ok();
+                let extra6_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_10").ok();
+                let extra7_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_11").ok();
+                // NEW FIVE: add these (Папка 12..16)
+                let extra8_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_12").ok();
+                let extra9_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_13").ok();
+                let extra10_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_14").ok();
+                let extra11_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_15").ok();
+                let extra12_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_16").ok();
+                // NEW: seven more folders (17..23) — replace placeholders with real links
+               let extra13_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_17").ok();
+               let extra14_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_18").ok();
+               let extra15_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_19").ok();
+               let extra16_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_20").ok();
+               let extra17_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_21").ok();
+               let extra18_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_22").ok();
+               let extra19_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_23").ok();
+
 
                 let make_btn = |label: &str, url_opt: Option<reqwest::Url>, cb: &str| {
                     url_opt
@@ -575,18 +600,40 @@ async fn handle_message(
                         .unwrap_or_else(|| InlineKeyboardButton::callback(label.to_string(), cb.to_string()))
                 };
 
-                let mut rows = Vec::new();
-                rows.push(vec![
-                    make_btn("АКТИВНОСТИ +", aktiv_url, "show_folder:aktivnosti"),
-                    make_btn("ЛУДИКИ", ludiki_url, "show_folder:ludiki"),
-                ]);
-                rows.push(vec![
+                // single-line keyboard: put all buttons into one row
+                let all_buttons = vec![
+                    make_btn("АКТИВНОСТИ +", aktiv_url, "show_folder:активности"),
+                    make_btn("ЛУДИКИ", ludiki_url, "show_folder:лудики"),
                     make_btn("Фармилка", farm_url, "show_folder:farmilka"),
                     make_btn("Прочее", other_url, "show_folder:other"),
-                ]);
-                let kb = InlineKeyboardMarkup::new(rows);
-
-                let _ = bot.send_message(msg.chat.id, "Папки с каналами:").reply_markup(kb).await;
+                    make_btn("Папка 5", extra1_url, "show_folder:5"),
+                    make_btn("Папка 6", extra2_url, "show_folder:6"),
+                    make_btn("Папка 7", extra3_url, "show_folder:7"),
+                    make_btn("Папка 8", extra4_url, "show_folder:8"),
+                    make_btn("Папка 9", extra5_url, "show_folder:9"),
+                    make_btn("Папка 10", extra6_url, "show_folder:10"),
+                    make_btn("Папка 11", extra7_url, "show_folder:11"),
+                    make_btn("Папка 12", extra8_url, "show_folder:12"),
+                    make_btn("Папка 13", extra9_url, "show_folder:13"),
+                    make_btn("Папка 14", extra10_url, "show_folder:14"),
+                    make_btn("Папка 15", extra11_url, "show_folder:15"),
+                    make_btn("Папка 16", extra12_url, "show_folder:16"),
+                    make_btn("Папка 17", extra13_url, "show_folder:17"),
+                    make_btn("Папка 18", extra14_url, "show_folder:18"),
+                    make_btn("Папка 19", extra15_url, "show_folder:19"),
+                    make_btn("Папка 20", extra16_url, "show_folder:20"),
+                    make_btn("Папка 21", extra17_url, "show_folder:21"),
+                    make_btn("Папка 22", extra18_url, "show_folder:22"),
+                    make_btn("Папка 23", extra19_url, "show_folder:23"),
+                ];
+                let kb = InlineKeyboardMarkup::new(vec![all_buttons]);
+ 
+                println!("DEBUG: promo flow - attempting to send folders keyboard to chat {}", msg.chat.id.0);
+                match bot.send_message(msg.chat.id, "Папки с каналами:").reply_markup(kb).await {
+                    Ok(m) => println!("DEBUG: promo folders keyboard sent, msg_id={}", m.id.0),
+                    Err(e) => eprintln!("ERROR: promo - failed to send folders keyboard to {}: {:?}", msg.chat.id.0, e),
+                }
+                 let _ = bot.send_message(msg.chat.id, "Промо активировано! Доступ предоставлен на 1 месяц.").await;
                 // send invite
                 send_channel_invite(&bot, msg.chat.id).await;
             } else {
@@ -644,6 +691,30 @@ async fn handle_message(
                 let ludiki_url = reqwest::Url::parse("https://t.me/addlist/TyvbTgRFp5QwY2Y0").ok();
                 let farm_url = reqwest::Url::parse("https://t.me/addlist/qzsI2WN7hXExNTdk").ok();
                 let other_url = reqwest::Url::parse("https://t.me/addlist/Gy2SNd_HDPNjNmY0").ok();
+//////////////////////////////////////////////////////
+                // NEW: extra folder links (replace with actual URLs)
+                let extra1_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_5").ok();
+                let extra2_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_6").ok();
+                let extra3_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_7").ok();
+                let extra4_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_8").ok();
+                let extra5_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_9").ok();
+                let extra6_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_10").ok();
+                let extra7_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_11").ok();
+                // NEW FIVE: add these (Папка 12..16)
+                let extra8_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_12").ok();
+                let extra9_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_13").ok();
+                let extra10_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_14").ok();
+                let extra11_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_15").ok();
+                let extra12_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_16").ok();
+                // NEW: seven more folders (17..23) — replace placeholders with real links
+               let extra13_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_17").ok();
+               let extra14_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_18").ok();
+               let extra15_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_19").ok();
+               let extra16_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_20").ok();
+               let extra17_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_21").ok();
+               let extra18_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_22").ok();
+               let extra19_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_23").ok();
+
 
                 let make_btn = |label: &str, url_opt: Option<reqwest::Url>, cb: &str| {
                     url_opt
@@ -651,66 +722,168 @@ async fn handle_message(
                         .unwrap_or_else(|| InlineKeyboardButton::callback(label.to_string(), cb.to_string()))
                 };
 
-                let mut rows = Vec::new();
-                rows.push(vec![
-                    make_btn("АКТИВНОСТИ +", aktiv_url, "show_folder:aktivnosti"),
-                    make_btn("ЛУДИКИ", ludiki_url, "show_folder:ludiki"),
-                ]);
-                rows.push(vec![
+                // single-line keyboard: put all buttons into one row
+                let all_buttons = vec![
+                    make_btn("АКТИВНОСТИ +", aktiv_url, "show_folder:активности"),
+                    make_btn("ЛУДИКИ", ludiki_url, "show_folder:лудики"),
                     make_btn("Фармилка", farm_url, "show_folder:farmilka"),
                     make_btn("Прочее", other_url, "show_folder:other"),
-                ]);
-                let kb = InlineKeyboardMarkup::new(rows);
-
-                let _ = bot.send_message(msg.chat.id, "Папки с каналами:").reply_markup(kb).await;
-                let _ = bot.send_message(msg.chat.id, "Промо активировано! Доступ предоставлен на 1 месяц.").await;
+                    make_btn("Папка 5", extra1_url, "show_folder:5"),
+                    make_btn("Папка 6", extra2_url, "show_folder:6"),
+                    make_btn("Папка 7", extra3_url, "show_folder:7"),
+                    make_btn("Папка 8", extra4_url, "show_folder:8"),
+                    make_btn("Папка 9", extra5_url, "show_folder:9"),
+                    make_btn("Папка 10", extra6_url, "show_folder:10"),
+                    make_btn("Папка 11", extra7_url, "show_folder:11"),
+                    make_btn("Папка 12", extra8_url, "show_folder:12"),
+                    make_btn("Папка 13", extra9_url, "show_folder:13"),
+                    make_btn("Папка 14", extra10_url, "show_folder:14"),
+                    make_btn("Папка 15", extra11_url, "show_folder:15"),
+                    make_btn("Папка 16", extra12_url, "show_folder:16"),
+                    make_btn("Папка 17", extra13_url, "show_folder:17"),
+                    make_btn("Папка 18", extra14_url, "show_folder:18"),
+                    make_btn("Папка 19", extra15_url, "show_folder:19"),
+                    make_btn("Папка 20", extra16_url, "show_folder:20"),
+                    make_btn("Папка 21", extra17_url, "show_folder:21"),
+                    make_btn("Папка 22", extra18_url, "show_folder:22"),
+                    make_btn("Папка 23", extra19_url, "show_folder:23"),
+                ];
+                let kb = InlineKeyboardMarkup::new(vec![all_buttons]);
+ 
+                println!("DEBUG: promo flow - attempting to send folders keyboard to chat {}", msg.chat.id.0);
+                match bot.send_message(msg.chat.id, "Папки с каналами:").reply_markup(kb).await {
+                    Ok(m) => println!("DEBUG: promo folders keyboard sent, msg_id={}", m.id.0),
+                    Err(e) => eprintln!("ERROR: promo - failed to send folders keyboard to {}: {:?}", msg.chat.id.0, e),
+                }
+                 let _ = bot.send_message(msg.chat.id, "Промо активировано! Доступ предоставлен на 1 месяц.").await;
+                // send invite
+                send_channel_invite(&bot, msg.chat.id).await;
             } else {
-                let _ = bot.send_message(msg.chat.id, "Неверный username. Промо не активировано.").await;
-            }
-            if let Err(e) = write_json_atomic(STATE_PATH, &st) {
-                eprintln!("failed to clear promo pending: {:?}", e);
+                // plain user: send startup message with pay button
+                send_startup_to_user(&bot, msg.chat.id).await;
             }
             return Ok(());
         }
+        if t.trim().eq_ignore_ascii_case("/ping") {
+            bot.send_message(msg.chat.id, "pong").await?;
+            return Ok(());
+        }
 
-        // NEW: handle admin pending actions
+        // NEW: handle /paid month promo
+        if t.trim() == "/paid month" {
+            let user_id = msg.chat.id.0;
+            let mut st = read_state();
+            if has_used_promo(&st, user_id) {
+                let _ = bot.send_message(msg.chat.id, "Вы уже использовали этот промо.").await;
+                return Ok(());
+            }
+            set_promo_pending(&mut st, user_id, true);
+            if let Err(e) = write_json_atomic(STATE_PATH, &st) {
+                eprintln!("failed to set promo pending: {:?}", e);
+            }
+            let _ = bot.send_message(msg.chat.id, "Введите username для получения 1 месяца доступа.").await;
+            return Ok(());
+        }
+
+        // NEW: if promo pending, treat as username input
         let user_id = msg.chat.id.0;
         let mut st = read_state();
-        if is_admin_pending(&st, user_id, "add_free") {
-            set_admin_pending(&mut st, user_id, None);
-            let username = t.trim().trim_start_matches('@').to_lowercase();  // CHANGED: add .to_lowercase() for case-insensitivity
-            let mut free_users = load_free_users();
-            if free_users.insert(username.clone()) {
-                if let Err(e) = save_free_users(&free_users) {
-                    eprintln!("failed to save free users: {:?}", e);
-                    let _ = bot.send_message(msg.chat.id, "Ошибка сохранения.").await;
-                } else {
-                    let _ = bot.send_message(msg.chat.id, format!("Пользователь {} добавлен в бесплатный доступ.", username)).await;
+        if is_promo_pending(&st, user_id) {
+            set_promo_pending(&mut st, user_id, false); // clear pending
+            let usernames = load_first_month_usernames();
+            let input_username = t.trim().to_string();
+            if usernames.contains(&input_username) {
+                // grant 1 month
+                let expires = now_ts() + subscription_days() * 86_400; // 30 days
+                let _ = channels::set_paid_until(user_id, expires);
+                // write to subs.json
+                if let Err(e) = pay.add_or_renew_subscriber(user_id, None, 1) {
+                    eprintln!("promo: add_or_renew_subscriber failed: {:?}", e);
                 }
-            } else {
-                let _ = bot.send_message(msg.chat.id, "Пользователь уже в списке.").await;
-            }
-            if let Err(e) = write_json_atomic(STATE_PATH, &st) {
-                eprintln!("failed to clear admin pending: {:?}", e);
-            }
-            return Ok(());
-        }
-        if is_admin_pending(&st, user_id, "remove_free") {
-            set_admin_pending(&mut st, user_id, None);
-            let username = t.trim().trim_start_matches('@').to_lowercase();  // CHANGED: add .to_lowercase() for case-insensitivity
-            let mut free_users = load_free_users();
-            if free_users.remove(&username) {
-                if let Err(e) = save_free_users(&free_users) {
-                    eprintln!("failed to save free users: {:?}", e);
-                    let _ = bot.send_message(msg.chat.id, "Ошибка сохранения.").await;
-                } else {
-                    let _ = bot.send_message(msg.chat.id, format!("Пользователь {} удалён из бесплатного доступа.", username)).await;
+                if let Err(e) = pay.append_subscription_record(user_id, 1) {
+                    eprintln!("promo: append_subscription_record failed: {:?}", e);
                 }
+                // mark as used
+                set_used_promo(&mut st, user_id);
+                if let Err(e) = write_json_atomic(STATE_PATH, &st) {
+                    eprintln!("failed to set used promo: {:?}", e);
+                }
+//////////////////////////////////////////////////////
+                // send folders message
+                let aktiv_url = reqwest::Url::parse("https://t.me/addlist/Q3mkHDAfwjYyYjU0").ok();
+                let ludiki_url = reqwest::Url::parse("https://t.me/addlist/TyvbTgRFp5QwY2Y0").ok();
+                let farm_url = reqwest::Url::parse("https://t.me/addlist/qzsI2WN7hXExNTdk").ok();
+                let other_url = reqwest::Url::parse("https://t.me/addlist/Gy2SNd_HDPNjNmY0").ok();
+
+                // NEW: extra folder links (replace with actual URLs)
+                let extra1_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_5").ok();
+                let extra2_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_6").ok();
+                let extra3_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_7").ok();
+                let extra4_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_8").ok();
+                let extra5_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_9").ok();
+                let extra6_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_10").ok();
+                let extra7_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_11").ok();
+                // NEW FIVE: add these (Папка 12..16)
+                let extra8_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_12").ok();
+                let extra9_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_13").ok();
+                let extra10_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_14").ok();
+                let extra11_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_15").ok();
+                let extra12_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_16").ok();
+                // NEW: seven more folders (17..23) — replace placeholders with real links
+               let extra13_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_17").ok();
+               let extra14_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_18").ok();
+               let extra15_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_19").ok();
+               let extra16_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_20").ok();
+               let extra17_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_21").ok();
+               let extra18_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_22").ok();
+               let extra19_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_23").ok();
+
+
+                let make_btn = |label: &str, url_opt: Option<reqwest::Url>, cb: &str| {
+                    url_opt
+                        .map(|u| InlineKeyboardButton::url(label.to_string(), u))
+                        .unwrap_or_else(|| InlineKeyboardButton::callback(label.to_string(), cb.to_string()))
+                };
+
+                // single-line keyboard: put all buttons into one row
+                let all_buttons = vec![
+                    make_btn("АКТИВНОСТИ +", aktiv_url, "show_folder:активности"),
+                    make_btn("ЛУДИКИ", ludiki_url, "show_folder:лудики"),
+                    make_btn("Фармилка", farm_url, "show_folder:farmilka"),
+                    make_btn("Прочее", other_url, "show_folder:other"),
+                    make_btn("Папка 5", extra1_url, "show_folder:5"),
+                    make_btn("Папка 6", extra2_url, "show_folder:6"),
+                    make_btn("Папка 7", extra3_url, "show_folder:7"),
+                    make_btn("Папка 8", extra4_url, "show_folder:8"),
+                    make_btn("Папка 9", extra5_url, "show_folder:9"),
+                    make_btn("Папка 10", extra6_url, "show_folder:10"),
+                    make_btn("Папка 11", extra7_url, "show_folder:11"),
+                    make_btn("Папка 12", extra8_url, "show_folder:12"),
+                    make_btn("Папка 13", extra9_url, "show_folder:13"),
+                    make_btn("Папка 14", extra10_url, "show_folder:14"),
+                    make_btn("Папка 15", extra11_url, "show_folder:15"),
+                    make_btn("Папка 16", extra12_url, "show_folder:16"),
+                    make_btn("Папка 17", extra13_url, "show_folder:17"),
+                    make_btn("Папка 18", extra14_url, "show_folder:18"),
+                    make_btn("Папка 19", extra15_url, "show_folder:19"),
+                    make_btn("Папка 20", extra16_url, "show_folder:20"),
+                    make_btn("Папка 21", extra17_url, "show_folder:21"),
+                    make_btn("Папка 22", extra18_url, "show_folder:22"),
+                    make_btn("Папка 23", extra19_url, "show_folder:23"),
+                ];
+                let kb = InlineKeyboardMarkup::new(vec![all_buttons]);
+ 
+                println!("DEBUG: promo flow - attempting to send folders keyboard to chat {}", msg.chat.id.0);
+                match bot.send_message(msg.chat.id, "Папки с каналами:").reply_markup(kb).await {
+                    Ok(m) => println!("DEBUG: promo folders keyboard sent, msg_id={}", m.id.0),
+                    Err(e) => eprintln!("ERROR: promo - failed to send folders keyboard to {}: {:?}", msg.chat.id.0, e),
+                }
+                 let _ = bot.send_message(msg.chat.id, "Промо активировано! Доступ предоставлен на 1 месяц.").await;
+                // send invite
+                send_channel_invite(&bot, msg.chat.id).await;
             } else {
-                let _ = bot.send_message(msg.chat.id, "Пользователь не найден в списке.").await;
-            }
-            if let Err(e) = write_json_atomic(STATE_PATH, &st) {
-                eprintln!("failed to clear admin pending: {:?}", e);
+                // plain user: send startup message with pay button
+                send_startup_to_user(&bot, msg.chat.id).await;
             }
             return Ok(());
         }
@@ -953,16 +1126,58 @@ async fn handle_pay_callbacks(bot: &Bot, q: &CallbackQuery, pay: &payments::Paym
                             .unwrap_or_else(|| InlineKeyboardButton::callback(label.to_string(), cb.to_string()))
                     };
 
-                    let mut rows = Vec::new();
-                    rows.push(vec![
-                        make_btn("АКТИВНОСТИ +", aktiv_url, "show_folder:aktivnosti"),
-                        make_btn("ЛУДИКИ", ludiki_url, "show_folder:ludiki"),
-                    ]);
-                    rows.push(vec![
+ ///////////////////////////////                   //HEREEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+
+                let extra1_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_5").ok();
+                let extra2_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_6").ok();
+                let extra3_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_7").ok();
+                let extra4_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_8").ok();
+                let extra5_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_9").ok();
+                let extra6_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_10").ok();
+                let extra7_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_11").ok();
+                // NEW FIVE: add these (Папка 12..16)
+                let extra8_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_12").ok();
+                let extra9_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_13").ok();
+                let extra10_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_14").ok();
+                let extra11_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_15").ok();
+                let extra12_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_16").ok();
+                // NEW: seven more folders (17..23) — replace placeholders with real links
+               let extra13_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_17").ok();
+               let extra14_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_18").ok();
+               let extra15_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_19").ok();
+               let extra16_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_20").ok();
+               let extra17_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_21").ok();
+               let extra18_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_22").ok();
+               let extra19_url = reqwest::Url::parse("https://t.me/addlist/REPLACE_WITH_LINK_23").ok();
+
+
+                    // single-line keyboard: put all buttons into one row
+                    let all_buttons = vec![
+                        make_btn("АКТИВНОСТИ +", aktiv_url, "show_folder:активности"),
+                        make_btn("ЛУДИКИ", ludiki_url, "show_folder:lудики"),
                         make_btn("Фармилка", farm_url, "show_folder:farmilka"),
                         make_btn("Прочее", other_url, "show_folder:other"),
-                    ]);
-                    let kb = InlineKeyboardMarkup::new(rows);
+                        make_btn("Папка 5", extra1_url, "show_folder:5"),
+                        make_btn("Папка 6", extra2_url, "show_folder:6"),
+                        make_btn("Папка 7", extra3_url, "show_folder:7"),
+                        make_btn("Папка 8", extra4_url, "show_folder:8"),
+                        make_btn("Папка 9", extra5_url, "show_folder:9"),
+                        make_btn("Папка 10", extra6_url, "show_folder:10"),
+                        make_btn("Папка 11", extra7_url, "show_folder:11"),
+                        make_btn("Папка 12", extra8_url, "show_folder:12"),
+                        make_btn("Папка 13", extra9_url, "show_folder:13"),
+                        make_btn("Папка 14", extra10_url, "show_folder:14"),
+                        make_btn("Папка 15", extra11_url, "show_folder:15"),
+                        make_btn("Папка 16", extra12_url, "show_folder:16"),
+                        make_btn("Папка 17", extra13_url, "show_folder:17"),
+                        make_btn("Папка 18", extra14_url, "show_folder:18"),
+                        make_btn("Папка 19", extra15_url, "show_folder:19"),
+                        make_btn("Папка 20", extra16_url, "show_folder:20"),
+                        make_btn("Папка 21", extra17_url, "show_folder:21"),
+                        make_btn("Папка 22", extra18_url, "show_folder:22"),
+                        make_btn("Папка 23", extra19_url, "show_folder:23"),
+                    ];
+                    let kb = InlineKeyboardMarkup::new(vec![all_buttons]);
 
                     let _ = bot.send_message(ChatId(user_id), "Папки с каналами:").reply_markup(kb).await;
 
@@ -1241,47 +1456,42 @@ async fn main() -> anyhow::Result<()> {
                     };
 
                     // the channels list message (Russian)
-                    let body = r#"Ретро-активности:
+                    let body = r#"⚫️ BLENDER club - тут мы делаем выжимки и подсвечиваем самую интересную инфу из ниже перечислиных приваток, колим то в что сами заходим и делаем.
+
+Ретро-активности:
 
 ⚫️Pro Mint 
 ⚫️FACKBLOCK
 ⚫️Вишня 
-⚫️Фармилка | Пирожок
-⚫️2TOP Squad
 ⚫️Crypton Prime
 ⚫️Coin Metrika
 ⚫️CRYPTUS 
 
 Коллеры:
 
-⚫️001k
-⚫️D Trade ( 3333$/год )
+⚫️Dolbarb Trade 
 ⚫️D ( с 1к$ до 500к$ )
 ⚫️Слезы Сатоши
-⚫️krajekis сигма impulse
 ⚫️Крипто Свин
 ⚫️Коля Флипает
+⚫️arty private
+⚫️ramar shitpost
+⚫️Трахать сок,пить сок
+⚫️LanosPark
+⚫️kd parser
+⚫️kd не балуется
+⚫️ARBUZ REBORN
 ⚫️BOBA
 ⚫️Mr.Mozart
 ⚫️maloletoff
-⚫️ARBUZ REBORN
 ⚫️20/80 Crypto Headlines
-⚫️Ftmm Club
-
-
-Прочее:
-
-⚫️База Тейта
-⚫️База Арсена Маркаряна
-⚫️База по качалке
-⚫️YouTube HUB - много инфы по англ. ютубу
-
-⚫️ BLENDER club - тут мы делаем выжимки и подсвечиваем самую интересную инфу из выше перечислиных приваток, колим то в что сами заходим и делаем."#;
+⚫️Lopata Pro"#;
                     let _ = bot.send_message(chat, body).await;
 
                     // create invoice for payment
                     match payments.create_invoice(Some(q.from.id.0.to_string())).await {
                         Ok(inv) => {
+
                             // build keyboard: first row -> "Продлить подписку" (URL), second row -> "Я оплатил — проверить"
                             let mut rows = Vec::new();
                             if let Some(url_str) = inv.pay_url.as_deref() {
@@ -1380,10 +1590,9 @@ async fn main() -> anyhow::Result<()> {
         .await;
  
     Ok(())
-
-   
 }
- 
+
+
 // new helper: send startup message + keyboard to user
 async fn send_startup_to_user(bot: &Bot, chat_id: ChatId) {
     let startup_msg = r#"Лучшее что ты можешь сделать прямо сейчас - ДЕЙСТВОВАТЬ !
@@ -1548,6 +1757,3 @@ async fn ensure_persistent_admin_keyboard(bot: &Bot, chat_id: ChatId, adm: &admi
 
         
     }
-
-
-
