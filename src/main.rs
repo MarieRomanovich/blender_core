@@ -838,6 +838,7 @@ async fn handle_message(
                let extra18_url = reqwest::Url::parse("https://t.me/+3K5aeNnaw8wzMTVk").ok();
                let extra19_url = reqwest::Url::parse("https://t.me/+OdStBvLy73s0MjU0").ok();
 
+
                 let make_btn = |label: &str, url_opt: Option<reqwest::Url>, cb: &str| {
                     url_opt
                         .map(|u| InlineKeyboardButton::url(label.to_string(), u))
@@ -869,9 +870,8 @@ async fn handle_message(
                 rows.push(vec![ make_btn("maloletoff", extra17_url, "show_folder:21") ]);
                 rows.push(vec![ make_btn("20/80 Crypto Hadlines", extra18_url, "show_folder:22") ]);
                 rows.push(vec![ make_btn("Lopata Pro", extra19_url, "show_folder:23") ]);
-                
- 
                 let kb = InlineKeyboardMarkup::new(rows);
+ 
  
                 println!("DEBUG: promo flow - attempting to send folders keyboard to chat {}", msg.chat.id.0);
                 match bot.send_message(msg.chat.id, "Доступные приватки:").reply_markup(kb).await {
@@ -1331,6 +1331,7 @@ async fn handle_pay_callback(
                             }
                             other => {
                                 let _ = bot
+                                   
                                     .answer_callback_query(qid)
                                     .text(format!("Status: {}", other))
                                     .show_alert(true)
@@ -1398,10 +1399,32 @@ async fn main() -> anyhow::Result<()> {
     let adm = admin::Admin::new_from_env();
 
     // Manual prune for testing
-    if let Err(e) = payments.prune_and_ban_expired_subscribers(&bot, Some("chats2.csv")).await {
+    if let Err(e) = payments.prune_and_ban_expired(&bot, Some("chats2.csv")).await {
         eprintln!("Manual prune failed: {:?}", e);
     } else {
         println!("Manual prune done");
+    }
+
+    // NEW: hourly background task to prune & ban expired users
+    {
+        let bot_clone = bot.clone();
+        let payments_clone = payments.clone();
+        tokio::spawn(async move {
+            loop {
+                println!("DEBUG: hourly prune task running");
+                match payments_clone.prune_and_ban_expired(&bot_clone, Some("chats2.csv")).await {
+                    Ok(attempted) => {
+                        if attempted.is_empty() {
+                            println!("DEBUG: hourly prune: no expired users found");
+                        } else {
+                            println!("DEBUG: hourly prune: attempted bans = {:?}", attempted);
+                        }
+                    }
+                    Err(err) => eprintln!("ERROR: hourly prune failed: {:?}", err),
+                }
+                tokio::time::sleep(Duration::from_secs(60 * 60)).await; // 1 hour
+            }
+        });
     }
  
     // unified callback handler for any pay:* callback
